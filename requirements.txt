@@ -1,0 +1,21 @@
+# GO2 Seeing-Eye Dog — Python Dependencies
+
+# Core ROS 2 Python client (installed with ROS 2 Humble)
+# rclpy
+# sensor_msgs, geometry_msgs, std_msgs, cv_bridge
+
+# Perception
+ultralytics>=8.0.0         # YOLOv8
+opencv-python>=4.8.0
+numpy>=1.24.0
+
+# Audio
+pyaudio>=0.2.13
+scipy>=1.11.0              # GCC-PHAT signal processing
+
+# Speech recognition
+openai-whisper>=20231117   # Local Whisper inference
+torch>=2.0.0               # Required by Whisper
+
+# Utilities
+transforms3d>=0.4.1        # Rotation utilities
