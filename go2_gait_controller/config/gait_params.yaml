@@ -1,0 +1,10 @@
+go2_gait_controller:
+  ros__parameters:
+    # Control loop frequency (Hz)
+    # Higher = smoother but more CPU — 50Hz is standard for legged robots
+    control_frequency: 50.0
+
+    # GO2 leg geometry (meters) — do not change unless using a different platform
+    hip_length:   0.0838
+    thigh_length: 0.213
+    calf_length:  0.213
