@@ -1,0 +1,40 @@
+# Build
+build/
+install/
+log/
+*.pyc
+__pycache__/
+
+# ROS 2
+*.bag
+*.db3
+*.db3-shm
+*.db3-wal
+
+# Models / weights
+*.pt
+*.onnx
+*.engine
+
+# Audio / media
+*.wav
+*.mp4
+*.bag
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Jetson / embedded
+*.ko
+*.dtb
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets / config
+config.py
+.env
