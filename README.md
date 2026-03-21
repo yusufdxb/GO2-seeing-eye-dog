@@ -93,6 +93,21 @@ GO2-seeing-eye-dog/
 
 ---
 
+## Development Roadmap
+
+| Milestone | Description | Status |
+|-----------|-------------|--------|
+| Literature review | Survey of assistive navigation and guide-dog robotics | In progress |
+| Perception baseline | YOLOv8 human detection + RealSense D435i depth integration | Planned |
+| Speaker identity | GCC-PHAT voice localization + Whisper speaker enrollment | Planned |
+| Identity gating | Fuse voice + vision for confirmed user ID | Planned |
+| Follow Me | Maintain following distance behind confirmed user | Planned |
+| Come Here | Navigate to calling user from stationary position | Planned |
+| Walk With Me | Side-by-side accompaniment with obstacle avoidance | Planned |
+| Baseline evaluation | Compare vs. AprilTag-only, phone-only, Unitree stock | Planned |
+
+---
+
 ## Contact
 
 **Yusuf Guenena** — Wayne State University
