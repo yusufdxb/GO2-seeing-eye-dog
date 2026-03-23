@@ -22,7 +22,7 @@ Public packages now:
 - `go2_voice_commander` for speech command handling
 - `go2_navigation` for Nav2 configuration
 - `go2_msgs` for custom ROS 2 interfaces
-- `go2_gait_controller` for a C++ lifecycle gait controller and simulation test world
+- `go2_gait_controller` for a C++ gait controller and simulation test world
 - `go2_bringup` for system launch
 
 That matters because the repo should be judged as an active robotics system under construction, not as a mock research concept.
@@ -87,23 +87,23 @@ The research question is whether multimodal identity gating is more reliable tha
 | Speech | Whisper local inference |
 | Languages | Python 3, C++17 |
 
-## Architecture
+## Public Architecture
 
-```text
-microphone array ------> go2_audio_perception ----+
-                                                   |
-RGB-D camera ----------> go2_perception ---------- +--> go2_intent_grounding --> confirmed target
-                                                   |
-voice commands --------> go2_voice_commander ------+
-
-LiDAR / safety sensors --> go2_safety_monitor ------------------------------+
-                                                                            |
-confirmed target -----------------------------------------------------------+--> go2_navigation / behavior logic
-                                                                            |
-                                                                           GO2 locomotion
-```
+![GO2 public system architecture](assets/system_architecture.svg)
 
 More detail: [ARCHITECTURE.md](ARCHITECTURE.md)
+
+## Evaluation Plan
+
+The repo now includes a publishable evaluation scaffold instead of vague future claims.
+
+See: [EVALUATION.md](EVALUATION.md)
+
+First metrics to add:
+- follow distance error
+- reacquisition success after occlusion
+- command-to-action latency
+- safety-triggered stop behavior
 
 ## What This Repo Signals To Employers
 
@@ -115,13 +115,13 @@ This repo is strongest as evidence of:
 
 It is not yet strong evidence of final assistive-navigation performance, because the public repo does not yet contain benchmark results for the full end-to-end behavior set.
 
-## Near-Term Documentation Gaps
+## Highest-Value Remaining Gaps
 
-The highest-value next additions to this repo are:
+The next additions that would raise this repo most are:
 - one integrated hardware demo video
-- architecture figure with real topics and package boundaries
-- first evaluation tables for follow, reacquisition, and stop behavior
-- explicit failure cases and safety triggers observed on hardware
+- first filled evaluation tables from real trials
+- failure-case notes from hardware runs
+- brief baseline comparison once the first trials exist
 
 ## Related Repositories
 
