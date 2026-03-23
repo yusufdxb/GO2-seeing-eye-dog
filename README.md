@@ -1,80 +1,60 @@
-# GO2 Seeing-Eye Dog
+# GO2 Seeing-Eye Dog 🦮
 
-> Assistive robotics thesis project on the Unitree GO2.
+> **Master's Thesis — Wayne State University**
+> M.S. Robotics Engineering (Intelligent Control)
 
-**Platform:** Unitree GO2 EDU + Jetson Orin  
-**Status:** active hardware-backed development  
-**Validation status:** implemented subsystems are public; end-to-end evaluation is still in progress
+**Status:** 🟡 In development — building on real hardware (Unitree GO2)
 
-## Project Goal
+---
 
-This project explores whether a quadruped can provide assistive guidance for visually impaired users in real environments. The emphasis is not broad autonomy marketing. It is a smaller, harder problem: reliably identifying the correct user, maintaining safe guidance behavior, and handling interruptions such as crowds, occlusion, and ambiguous voice commands.
+## Overview
 
-## What Is Public In This Repo
+An assistive mobility system built on the **Unitree GO2** quadruped, designed to guide visually impaired users in real environments. The robot identifies a specific user by voice, navigates toward them, and maintains safe accompaniment through hallways and crowds.
 
-This repository already contains real project structure and code, not only a thesis outline.
+The core challenge is reliability on real hardware in uncontrolled spaces — not just getting it to work in a lab once, but handling occlusion, crowds, and dynamic scenes consistently.
 
-Public packages now:
-- `go2_audio_perception` for microphone-array processing and sound-source localization
-- `go2_perception` for human detection and tracking
-- `go2_intent_grounding` for multimodal user confirmation logic
-- `go2_safety_monitor` for obstacle and safety checks
-- `go2_voice_commander` for speech command handling
-- `go2_navigation` for Nav2 configuration
-- `go2_msgs` for custom ROS 2 interfaces
-- `go2_gait_controller` for a C++ gait controller and simulation test world
-- `go2_bringup` for system launch
+---
 
-That matters because the repo should be judged as an active robotics system under construction, not as a mock research concept.
+## Behavior Set
 
-## System Scope
-
-The target behavior set is intentionally narrow:
-
-| Behavior | Intent |
+| Behavior | Description |
 |---|---|
-| Come here | navigate to the calling user from rest |
-| Follow me | maintain distance behind a confirmed user |
-| Walk with me | support side-by-side accompaniment |
-| Stop / wait | halt on command or safety event |
-| Reacquire | recover after temporary loss or occlusion |
+| **Come here** | Navigate to the calling user from a stationary position |
+| **Follow me** | Maintain safe following distance behind a moving user |
+| **Walk with me** | Side-by-side accompaniment for active guidance |
+| **Stop / Wait** | Halt on command or safety trigger |
+| **Reacquire** | Re-identify and resume tracking after occlusion |
 
-The research question is whether multimodal identity gating is more reliable than simpler baselines in shared spaces.
+Identity gating — confirming the right person via voice and vision — runs across all behaviors to prevent false triggers in multi-person environments.
 
-## Current Status
+---
 
-| Area | Public status |
+## Research Direction
+
+The work is aimed at being publishable. The focus is on a small, rigorous behavior set rather than breadth, with proper evaluation against baselines:
+
+| Baseline | Description |
 |---|---|
-| Repository structure | implemented |
-| Custom ROS 2 messages | implemented |
-| Audio perception package | implemented in repo |
-| Visual perception package | implemented in repo |
-| Intent grounding package | implemented in repo |
-| Safety monitoring package | implemented in repo |
-| Voice command package | implemented in repo |
-| Gait controller package | implemented in repo |
-| End-to-end human guidance benchmark | not yet published |
-| Comparative evaluation vs baselines | not yet published |
-| Final thesis behavior claims | still under validation |
+| **AprilTag-only** | Fiducial marker on user — no perception, no reasoning |
+| **Phone-only** | BLE/GPS signal from user's phone |
+| **Unitree stock mode** | Factory follow behavior |
+| **Proposed system** | Multimodal identity-gated navigation |
 
-## Baselines Under Consideration
+Exact scope is subject to change as the literature review progresses.
 
-| Baseline | Why it matters |
-|---|---|
-| AprilTag-only user following | simple visual baseline with explicit target identity |
-| Phone-only localization or signaling | low-perception assistive baseline |
-| Unitree stock follow behavior | platform-native comparison |
-| Proposed multimodal system | voice + vision + navigation gating |
+---
 
 ## Hardware
 
 | Component | Role |
 |---|---|
-| Unitree GO2 EDU | locomotion platform |
-| NVIDIA Jetson Orin | onboard compute |
-| Intel RealSense D435i | RGB-D human perception |
-| USB microphone array | audio localization and command capture |
-| Mid-360 LiDAR | navigation and obstacle sensing |
+| Unitree GO2 (EDU) | Quadruped locomotion platform |
+| NVIDIA Jetson Orin | Onboard compute |
+| USB Microphone Array (4-ch) | Voice localization and speaker identity |
+| Intel RealSense D435i | RGB-D human detection and tracking |
+| Mid-360 LiDAR | Navigation and obstacle avoidance |
+
+---
 
 ## Software Stack
 
@@ -84,32 +64,36 @@ The research question is whether multimodal identity gating is more reliable tha
 | Navigation | Nav2 |
 | Perception | YOLOv8, OpenCV, RealSense SDK |
 | Audio | PyAudio, SciPy, GCC-PHAT |
-| Speech | Whisper local inference |
+| Speech | OpenAI Whisper (local inference) |
 | Languages | Python 3, C++17 |
 
-## Public Architecture
+---
 
-![GO2 public system architecture](assets/system_architecture.svg)
+## Package Structure
 
-More detail: [ARCHITECTURE.md](ARCHITECTURE.md)
+```
+GO2-seeing-eye-dog/
+├── go2_bringup/              # Launch files
+├── go2_audio_perception/     # Microphone array + sound-source localization
+├── go2_perception/           # Human detection, tracking, re-ID
+├── go2_safety_monitor/       # Obstacle and safety detection
+├── go2_intent_grounding/     # Multimodal identity gating
+├── go2_voice_commander/      # Whisper ASR + command parsing
+├── go2_navigation/           # Nav2 config and behavior trees
+└── go2_msgs/                 # Custom ROS 2 message definitions
+```
 
-## Evaluation Plan
+---
 
-See: [EVALUATION.md](EVALUATION.md)
+## Related Work
 
-First metrics to add:
-- follow distance error
-- reacquisition success after occlusion
-- command-to-action latency
-- safety-triggered stop behavior
+- University of Glasgow — RoboGuide (Unitree Go1, 2024)
+- MIT — Guide Dog Robot (BarkOur legged platform)
+- Unitree GO2 SDK: [github.com/unitreerobotics/unitree_ros2](https://github.com/unitreerobotics/unitree_ros2)
 
-## Related Repositories
-
-- [`ros2-go2-nav2-yolo`](https://github.com/yusufdxb/ros2-go2-nav2-yolo) isolates perception-to-navigation integration in simulation.
-- [`go2-simple-workspace`](https://github.com/yusufdxb/go2-simple-workspace) is a narrower voice-control companion repo.
+---
 
 ## Contact
 
-**Yusuf Guenena**  
-Wayne State University  
+**Yusuf Guenena** — Wayne State University
 [yusuf.a.guenena@gmail.com](mailto:yusuf.a.guenena@gmail.com) · [LinkedIn](https://www.linkedin.com/in/yusuf-guenena)
