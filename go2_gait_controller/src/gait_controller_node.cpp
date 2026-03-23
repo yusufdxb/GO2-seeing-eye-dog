@@ -47,9 +47,8 @@ CallbackReturn GaitControllerNode::on_configure(const rclcpp_lifecycle::State &)
   current_joint_pos_.assign(12, 0.0);
 
   // Create publishers
-  trajectory_pub_ = this->create_lifecycle_publisher<
-    trajectory_msgs::msg::JointTrajectory>(
-      "/joint_group_effort_controller/joint_trajectory", 10);
+  trajectory_pub_ = this->create_publisher<trajectory_msgs::msg::JointTrajectory>(
+    "/joint_group_effort_controller/joint_trajectory", 10);
 
   // Create subscribers
   gait_cmd_sub_ = this->create_subscription<std_msgs::msg::String>(
@@ -281,8 +280,6 @@ std::vector<double> GaitControllerNode::leg_ik(
 
   // Project to sagittal plane for thigh + calf IK
   double leg_len_sq = x * x + z * z - hip_length_ * hip_length_;
-  double leg_len    = std::sqrt(std::max(0.0, leg_len_sq));
-
   double cos_calf = (leg_len_sq - thigh_length_ * thigh_length_ - calf_length_ * calf_length_)
                     / (2.0 * thigh_length_ * calf_length_);
   cos_calf = std::clamp(cos_calf, -1.0, 1.0);
