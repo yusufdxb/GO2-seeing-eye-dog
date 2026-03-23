@@ -4,7 +4,7 @@
 
 **Platform:** Unitree GO2 EDU + Jetson Orin  
 **Status:** active hardware-backed development  
-**Public repo status:** implemented subsystems are public; end-to-end evaluation is still in progress
+**Validation status:** implemented subsystems are public; end-to-end evaluation is still in progress
 
 ## Project Goal
 
@@ -94,8 +94,6 @@ The research question is whether multimodal identity gating is more reliable tha
 More detail: [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Evaluation Plan
-
-Measurement plan for the first public evaluation pass:
 
 See: [EVALUATION.md](EVALUATION.md)
 
