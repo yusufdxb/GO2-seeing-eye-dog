@@ -95,7 +95,7 @@ More detail: [ARCHITECTURE.md](ARCHITECTURE.md)
 
 ## Evaluation Plan
 
-The repo now includes a publishable evaluation scaffold instead of vague future claims.
+Measurement plan for the first public evaluation pass:
 
 See: [EVALUATION.md](EVALUATION.md)
 
@@ -104,24 +104,6 @@ First metrics to add:
 - reacquisition success after occlusion
 - command-to-action latency
 - safety-triggered stop behavior
-
-## What This Repo Signals To Employers
-
-This repo is strongest as evidence of:
-- real robotics platform work, not only simulation
-- ROS 2 system decomposition into packages with explicit interfaces
-- multimodal thinking across perception, speech, safety, and control
-- willingness to keep scope narrow enough to evaluate honestly
-
-It is not yet strong evidence of final assistive-navigation performance, because the public repo does not yet contain benchmark results for the full end-to-end behavior set.
-
-## Highest-Value Remaining Gaps
-
-The next additions that would raise this repo most are:
-- one integrated hardware demo video
-- first filled evaluation tables from real trials
-- failure-case notes from hardware runs
-- brief baseline comparison once the first trials exist
 
 ## Related Repositories
 
