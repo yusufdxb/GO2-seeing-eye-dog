@@ -1,0 +1,29 @@
+{
+  "evaluation_type": "synthetic",
+  "timestamp": "2026-03-24T00:24:13Z",
+  "config": {
+    "n_speakers": 50,
+    "n_target_per_speaker": 20,
+    "n_nontarget_per_speaker": 20,
+    "embedding_dim": 192,
+    "seed": 42,
+    "note": "Synthetic embeddings modelling ECAPA-TDNN behavior"
+  },
+  "results": {
+    "eer_percent": 25.0,
+    "eer_threshold": 0.8225,
+    "n_target_trials": 1000,
+    "n_nontarget_trials": 1000,
+    "target_score_mean": 0.8222,
+    "target_score_std": 0.0191,
+    "nontarget_score_mean": 0.0012,
+    "nontarget_score_std": 0.073
+  },
+  "next_steps": [
+    "Collect 10-30s enrollment audio from target speaker",
+    "Collect 20+ target test clips (same speaker, varied conditions)",
+    "Collect 20+ nontarget clips (different speakers)",
+    "Run: python3 evaluation/eval_speaker_id.py enroll ...",
+    "Run: python3 evaluation/eval_speaker_id.py eval ..."
+  ]
+}
