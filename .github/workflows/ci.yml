@@ -52,8 +52,8 @@ jobs:
       - name: Install dependencies
         run: |
           apt-get update -q
-          apt-get install -y python3-colcon-common-extensions python3-pip
-          pip install ultralytics opencv-python-headless pyaudio scipy numpy
+          apt-get install -y python3-colcon-common-extensions python3-pip portaudio19-dev
+          pip install --break-system-packages ultralytics opencv-python-headless pyaudio scipy numpy
       - name: Build msgs first, then packages
         run: |
           . /opt/ros/jazzy/setup.sh
