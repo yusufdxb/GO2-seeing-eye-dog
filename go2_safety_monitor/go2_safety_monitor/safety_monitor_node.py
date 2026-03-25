@@ -15,7 +15,7 @@ import cv2
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import Image
+from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import String
 from cv_bridge import CvBridge
 
@@ -49,16 +49,23 @@ class SafetyMonitorNode(Node):
         self.depth_sub = self.create_subscription(
             Image, "/camera/depth/image_rect_raw", self.depth_callback, qos
         )
+        self.info_sub = self.create_subscription(
+            CameraInfo, "/camera/depth/camera_info", self.info_callback, 10
+        )
 
         self.alert_pub = self.create_publisher(SafetyAlert, "/go2/safety_alert", 10)
         self.state_pub = self.create_publisher(String, "/go2/safety_state", 10)
         self.vis_pub = self.create_publisher(Image, "/go2/safety/visualization", 10)
 
-        # Camera intrinsics (updated by camera_info callback)
-        self.fx = 386.0
-        self.baseline_m = None
+        # Camera intrinsics — populated by CameraInfo callback
+        self.fx = None
 
         self.get_logger().info("SafetyMonitorNode ready.")
+
+    def info_callback(self, msg: CameraInfo):
+        if self.fx is None:
+            self.fx = msg.k[0]
+            self.get_logger().info(f"Camera intrinsics received: fx={self.fx:.1f}")
 
     def depth_callback(self, msg: Image):
         depth_raw = self.bridge.imgmsg_to_cv2(msg, desired_encoding="passthrough")
@@ -133,7 +140,12 @@ class SafetyMonitorNode(Node):
                     gap = max(gap, current_gap)
                 else:
                     current_gap = 0
-            gap_m = gap * (2.0 * np.tan(np.radians(43)) * SLOWDOWN_DISTANCE_M) / w
+            if self.fx is not None and self.fx > 0:
+                # Metric width at reference depth using pinhole projection: W = pixels * Z / fx
+                gap_m = gap * SLOWDOWN_DISTANCE_M / self.fx
+            else:
+                # Fallback: approximate using 86° horizontal FOV (RealSense D435i default)
+                gap_m = gap * (2.0 * np.tan(np.radians(43)) * SLOWDOWN_DISTANCE_M) / w
             if gap_m < MIN_PASSAGE_WIDTH_M:
                 alerts.append(("NARROW_PASSAGE", gap_m, f"Passage width {gap_m:.2f}m"))
 
