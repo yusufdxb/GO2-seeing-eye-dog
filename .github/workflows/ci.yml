@@ -42,6 +42,23 @@ jobs:
             echo "OK: $pkg"
           done
 
+  test:
+    name: Unit tests
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - run: pip install numpy scipy pytest
+      - name: Run unit tests
+        run: |
+          python3 -m pytest \
+            go2_audio_perception/test/ \
+            go2_intent_grounding/test/ \
+            evaluation/tests/ \
+            -v -p no:cacheprovider
+
   build:
     name: Build (ROS 2 Jazzy)
     runs-on: ubuntu-24.04

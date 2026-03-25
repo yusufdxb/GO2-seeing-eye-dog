@@ -12,12 +12,16 @@ the confirmed target is published. This prevents false triggers.
 import math
 import numpy as np
 import rclpy
+import rclpy.duration
 from rclpy.node import Node
 from rclpy.time import Duration
 from std_msgs.msg import Float32, String
 from geometry_msgs.msg import PoseStamped
+import tf2_ros
+import tf2_geometry_msgs  # noqa: F401 — registers PoseStamped transform support
 
 from go2_msgs.msg import DetectedHumanArray, ConfirmedTarget
+from go2_intent_grounding.fusion import compute_fused_score
 
 
 class IntentGroundingNode(Node):
@@ -62,6 +66,10 @@ class IntentGroundingNode(Node):
         self.goal_pub = self.create_publisher(PoseStamped, "/goal_pose", 10)
         self.state_pub = self.create_publisher(String, "/go2/grounding_state", 10)
 
+        # TF2 — for transforming camera-frame detections into the map frame
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
+
         self.get_logger().info("IntentGroundingNode ready.")
 
     def bearing_callback(self, msg: Float32):
@@ -94,27 +102,16 @@ class IntentGroundingNode(Node):
         best_human = None
 
         for human in msg.humans:
-            # Visual score from detection confidence
-            visual_score = human.confidence
-
-            if audio_valid:
-                # Compute angle to human in camera frame (X-Z plane)
-                human_angle = math.atan2(human.pose.position.x, human.pose.position.z)
-                angle_diff = abs(human_angle - self.latest_bearing_rad)
-                # Normalize to [0, pi]
-                angle_diff = min(angle_diff, 2 * math.pi - angle_diff)
-
-                if angle_diff < self.bearing_tol:
-                    # Soft score: 1.0 at zero diff, falls to ~0 at bearing_tol
-                    audio_score = max(0.0, 1.0 - (angle_diff / self.bearing_tol))
-                else:
-                    audio_score = 0.0
-
-                fused_score = self.audio_w * audio_score + self.visual_w * visual_score
-            else:
-                # Audio stale — rely on visual only, but lower weight
-                fused_score = visual_score * 0.7
-
+            human_angle = math.atan2(human.pose.position.x, human.pose.position.z)
+            fused_score = compute_fused_score(
+                visual_score=human.confidence,
+                human_angle_rad=human_angle,
+                audio_bearing_rad=self.latest_bearing_rad,
+                bearing_tol_rad=self.bearing_tol,
+                audio_weight=self.audio_w,
+                visual_weight=self.visual_w,
+                audio_valid=audio_valid,
+            )
             if fused_score > best_score:
                 best_score = fused_score
                 best_human = human
@@ -139,14 +136,21 @@ class IntentGroundingNode(Node):
             confirmed.confidence = float(best_score)
             self.target_pub.publish(confirmed)
 
-            # Publish Nav2 goal
-            goal = PoseStamped()
-            goal.header = msg.header
-            goal.header.frame_id = "map"
-            # NOTE: In production this needs a TF transform from camera frame to map frame.
-            # Here we forward the detection pose directly for testing.
-            goal.pose = best_human.pose
-            self.goal_pub.publish(goal)
+            # Publish Nav2 goal — transform from camera frame to map frame via TF2
+            camera_ps = PoseStamped()
+            camera_ps.header = msg.header
+            camera_ps.pose = best_human.pose
+            try:
+                map_ps = self.tf_buffer.transform(
+                    camera_ps,
+                    "map",
+                    timeout=rclpy.duration.Duration(seconds=0.1),
+                )
+                self.goal_pub.publish(map_ps)
+            except tf2_ros.TransformException as e:
+                self.get_logger().warn(
+                    f"TF lookup camera→map failed: {e}. Goal not published."
+                )
 
             self._publish_state("TARGET_LOCKED")
             self.get_logger().info(

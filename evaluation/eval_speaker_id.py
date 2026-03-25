@@ -60,7 +60,8 @@ def compute_eer(
         (eer: float, threshold: float) where EER is in [0, 1].
     """
     all_scores = sorted(set(target_scores + nontarget_scores))
-    best_eer = 1.0
+    best_diff = float("inf")
+    best_eer = 0.5
     best_threshold = 0.0
 
     for threshold in all_scores:
@@ -69,9 +70,12 @@ def compute_eer(
         # False Acceptance Rate: non-target trials accepted
         far = sum(1 for s in nontarget_scores if s >= threshold) / len(nontarget_scores)
 
-        eer_candidate = abs(frr - far)
-        if eer_candidate < abs(best_eer - 0.5) * 2:  # closer to frr==far
-            best_eer = (frr + far) / 2
+        diff = abs(frr - far)
+        candidate = (frr + far) / 2
+        # Keep the operating point closest to frr==far; break ties by lowest EER
+        if diff < best_diff or (diff == best_diff and candidate < best_eer):
+            best_diff = diff
+            best_eer = candidate
             best_threshold = threshold
 
     return best_eer, best_threshold
