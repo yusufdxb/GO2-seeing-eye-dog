@@ -1,0 +1,24 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>go2_bringup</name>
+  <version>1.0.0</version>
+  <description>Launch files to bring up the full GO2 Seeing-Eye Dog stack.</description>
+
+  <maintainer email="yusuf.a.guenena@gmail.com">Yusuf Guenena</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>go2_audio_perception</exec_depend>
+  <exec_depend>go2_perception</exec_depend>
+  <exec_depend>go2_intent_grounding</exec_depend>
+  <exec_depend>go2_safety_monitor</exec_depend>
+  <exec_depend>go2_voice_commander</exec_depend>
+  <exec_depend>go2_gait_controller</exec_depend>
+  <exec_depend>go2_msgs</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>
