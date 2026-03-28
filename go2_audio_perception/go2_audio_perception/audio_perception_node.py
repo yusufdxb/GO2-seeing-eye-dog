@@ -11,7 +11,7 @@ import pyaudio
 import scipy.signal as signal
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import Float32
+from std_msgs.msg import Float32, Int16MultiArray
 from geometry_msgs.msg import Vector3Stamped
 
 
@@ -77,6 +77,7 @@ class AudioPerceptionNode(Node):
         # Publishers
         self.bearing_pub = self.create_publisher(Float32, "/go2/audio/bearing_deg", 10)
         self.raw_pub = self.create_publisher(Vector3Stamped, "/go2/audio/sound_source", 10)
+        self.audio_pub = self.create_publisher(Int16MultiArray, "/go2/audio/mono_raw", 10)
 
         # PyAudio setup
         self.pa = pyaudio.PyAudio()
@@ -106,6 +107,11 @@ class AudioPerceptionNode(Node):
         energy = np.mean(audio[:, 0] ** 2)
         if energy < self.energy_threshold:
             return
+
+        # Publish mono audio (first channel)
+        audio_msg = Int16MultiArray()
+        audio_msg.data = audio[:, 0].tolist()
+        self.audio_pub.publish(audio_msg)
 
         # Use first two mics for primary TDOA estimate
         mic0 = audio[:, 0].astype(np.float32)
