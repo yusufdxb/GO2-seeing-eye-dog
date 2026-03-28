@@ -1,0 +1,24 @@
+services:
+  nemo-ros2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: nemo-ros2:latest
+    container_name: nemo-ros2
+    network_mode: host
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    volumes:
+      - /home/yusuf/workspace:/home/yusuf/workspace
+      - /home/yusuf/ros2_ws:/home/yusuf/ros2_ws
+    environment:
+      - DISPLAY=${DISPLAY}
+      - QT_X11_NO_MITSHM=1
+    user: yusuf
+    working_dir: /home/yusuf/workspace/GO2-seeing-eye-dog/go2_audio_perception
+    command: /bin/bash
