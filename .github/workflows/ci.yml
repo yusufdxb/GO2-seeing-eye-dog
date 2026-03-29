@@ -68,8 +68,16 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
+          . /opt/ros/jazzy/setup.sh
           apt-get update -q
-          apt-get install -y python3-colcon-common-extensions python3-pip portaudio19-dev
+          apt-get install -y \
+            python3-colcon-common-extensions \
+            python3-pip \
+            python3-rosdep \
+            portaudio19-dev
+          rosdep init || true
+          rosdep update
+          rosdep install --from-paths . --ignore-src -r -y --rosdistro jazzy
           pip install --break-system-packages ultralytics opencv-python-headless pyaudio scipy numpy
       - name: Build msgs first, then packages
         run: |
