@@ -14,7 +14,6 @@ for _mod in [
 
 import numpy as np
 import pytest
-
 from go2_audio_perception.audio_perception_node import (
     MIC_SPACING,
     SPEED_OF_SOUND,

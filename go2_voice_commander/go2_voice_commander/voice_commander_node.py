@@ -8,15 +8,15 @@ Wake word: "hey robot" (or configurable)
 Commands handled: come, stop, wait, follow, help
 """
 
-import pyaudio
-import numpy as np
-import whisper
-import threading
 import queue
+import threading
+
+import numpy as np
+import pyaudio
 import rclpy
+import whisper
 from rclpy.node import Node
 from std_msgs.msg import String
-
 
 WAKE_WORDS = {"hey robot", "hey go2", "excuse me", "come here", "come"}
 COMMAND_MAP = {
