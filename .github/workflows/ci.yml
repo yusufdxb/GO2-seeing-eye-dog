@@ -78,7 +78,7 @@ jobs:
           rosdep init || true
           rosdep update
           rosdep install --from-paths . --ignore-src -r -y --rosdistro jazzy
-          pip install ultralytics opencv-python-headless pyaudio scipy numpy
+          pip install --break-system-packages ultralytics opencv-python-headless pyaudio scipy numpy
       - name: Build msgs first, then packages
         run: |
           . /opt/ros/jazzy/setup.sh
