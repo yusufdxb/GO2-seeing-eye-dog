@@ -10,14 +10,14 @@ import cv2
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
-
-# Custom message — see go2_msgs/msg/DetectedHuman.msg
-from go2_msgs.msg import DetectedHuman, DetectedHumanArray
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import Header
 from ultralytics import YOLO
+
+# Custom message — see go2_msgs/msg/DetectedHuman.msg
+from go2_msgs.msg import DetectedHuman, DetectedHumanArray
 
 
 class PerceptionNode(Node):

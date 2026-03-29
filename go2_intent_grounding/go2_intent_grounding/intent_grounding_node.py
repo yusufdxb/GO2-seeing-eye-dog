@@ -16,11 +16,11 @@ import rclpy.duration
 import tf2_geometry_msgs  # noqa: F401 — registers PoseStamped transform support
 import tf2_ros
 from geometry_msgs.msg import PoseStamped
-from go2_msgs.msg import ConfirmedTarget, DetectedHumanArray
 from rclpy.node import Node
 from std_msgs.msg import Float32, String
 
 from go2_intent_grounding.fusion import compute_fused_score
+from go2_msgs.msg import ConfirmedTarget, DetectedHumanArray
 
 
 class IntentGroundingNode(Node):

@@ -14,11 +14,12 @@ import cv2
 import numpy as np
 import rclpy
 from cv_bridge import CvBridge
-from go2_msgs.msg import SafetyAlert
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import String
+
+from go2_msgs.msg import SafetyAlert
 
 # Robot physical parameters
 ROBOT_WIDTH_M = 0.35          # GO2 shoulder width
