@@ -8,12 +8,10 @@ Publishes bearing angle for the robot to orient toward the caller.
 
 import numpy as np
 import pyaudio
-import scipy.signal as signal
 import rclpy
+from geometry_msgs.msg import Vector3Stamped
 from rclpy.node import Node
 from std_msgs.msg import Float32, Int16MultiArray
-from geometry_msgs.msg import Vector3Stamped
-
 
 # Physical microphone array geometry (meters)
 # Assumes a 4-mic linear array mounted on the GO2's head

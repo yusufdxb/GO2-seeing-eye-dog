@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
-import rclpy
-from rclpy.node import Node
-from std_msgs.msg import Int16MultiArray, String
-import numpy as np
-import torch
-import nemo.collections.asr as nemo_asr
 import queue
 import threading
+
+import nemo.collections.asr as nemo_asr
+import numpy as np
+import rclpy
+import torch
+from rclpy.node import Node
+from std_msgs.msg import Int16MultiArray, String
+
 
 class NemoASRNode(Node):
     def __init__(self):
@@ -84,17 +86,17 @@ class NemoASRNode(Node):
         with torch.no_grad():
             input_signal = torch.tensor(audio_segment).unsqueeze(0).to(self.device)
             input_signal_len = torch.tensor([len(audio_segment)]).to(self.device)
-            
+
             # EncDecCTCModelBPE has transcribe method which is easier
             # but for streaming we might want manual forward if we had cache
             # Let's use a temporary file-less approach if possible or simple transcribe
             # Actually, transcribe() usually takes a list of paths.
             # For raw tensors, we can use forward() and decode.
-            
+
             log_probs, encoded_len, greedy_predictions = self.asr_model(
                 input_signal=input_signal, input_signal_length=input_signal_len
             )
-            
+
             hypotheses = self.asr_model.decoding.ctc_decoder_predictions_tensor(
                 greedy_predictions, decoder_lengths=encoded_len
             )

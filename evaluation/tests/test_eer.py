@@ -1,6 +1,5 @@
 """Unit tests for EER computation and DET curve generation."""
 import pytest
-
 from evaluation.eval_speaker_id import compute_det_curve, compute_eer
 
 

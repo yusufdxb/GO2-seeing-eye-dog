@@ -2,7 +2,6 @@
 import math
 
 import pytest
-
 from go2_intent_grounding.fusion import compute_audio_score, compute_fused_score
 
 BEARING_TOL = math.radians(25.0)

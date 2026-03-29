@@ -22,7 +22,6 @@ Dependencies: numpy matplotlib scipy (no speechbrain required)
 from __future__ import annotations
 
 import json
-import math
 import sys
 import time
 from pathlib import Path
@@ -31,7 +30,7 @@ import numpy as np
 
 # ── Import EER functions from the main evaluator ─────────────────────────────
 sys.path.insert(0, str(Path(__file__).parent))
-from eval_speaker_id import compute_eer, compute_det_curve
+from eval_speaker_id import compute_det_curve, compute_eer
 
 # ── Matplotlib (headless) ────────────────────────────────────────────────────
 try:
@@ -177,7 +176,7 @@ def main() -> None:
     nt_mean = float(np.mean(nontarget_scores))
     nt_std = float(np.std(nontarget_scores))
 
-    print(f"\nScore distributions:")
+    print("\nScore distributions:")
     print(f"  Target:    mean={t_mean:.4f}  std={t_std:.4f}")
     print(f"  Nontarget: mean={nt_mean:.4f}  std={nt_std:.4f}")
 

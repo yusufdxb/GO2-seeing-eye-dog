@@ -6,19 +6,18 @@ Associates 2D bounding boxes with depth measurements to produce 3D human poses.
 Publishes DetectedHuman array for the intent grounding node.
 """
 
-import numpy as np
 import cv2
-from ultralytics import YOLO
+import numpy as np
 import rclpy
-from rclpy.node import Node
-from rclpy.qos import QoSProfile, ReliabilityPolicy
-from sensor_msgs.msg import Image, CameraInfo
-from geometry_msgs.msg import PoseArray, Pose
-from std_msgs.msg import Header
 from cv_bridge import CvBridge
 
 # Custom message — see go2_msgs/msg/DetectedHuman.msg
 from go2_msgs.msg import DetectedHuman, DetectedHumanArray
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, ReliabilityPolicy
+from sensor_msgs.msg import CameraInfo, Image
+from std_msgs.msg import Header
+from ultralytics import YOLO
 
 
 class PerceptionNode(Node):

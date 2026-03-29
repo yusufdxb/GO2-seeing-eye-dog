@@ -10,17 +10,15 @@ Analyzes depth images for safety-critical obstacles:
 Publishes safety alerts that the Nav2 behavior tree responds to.
 """
 
-import numpy as np
 import cv2
+import numpy as np
 import rclpy
+from cv_bridge import CvBridge
+from go2_msgs.msg import SafetyAlert
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, ReliabilityPolicy
 from sensor_msgs.msg import CameraInfo, Image
 from std_msgs.msg import String
-from cv_bridge import CvBridge
-
-from go2_msgs.msg import SafetyAlert
-
 
 # Robot physical parameters
 ROBOT_WIDTH_M = 0.35          # GO2 shoulder width

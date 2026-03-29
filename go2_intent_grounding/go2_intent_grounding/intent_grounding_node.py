@@ -10,17 +10,16 @@ the confirmed target is published. This prevents false triggers.
 """
 
 import math
-import numpy as np
+
 import rclpy
 import rclpy.duration
-from rclpy.node import Node
-from rclpy.time import Duration
-from std_msgs.msg import Float32, String
-from geometry_msgs.msg import PoseStamped
-import tf2_ros
 import tf2_geometry_msgs  # noqa: F401 — registers PoseStamped transform support
+import tf2_ros
+from geometry_msgs.msg import PoseStamped
+from go2_msgs.msg import ConfirmedTarget, DetectedHumanArray
+from rclpy.node import Node
+from std_msgs.msg import Float32, String
 
-from go2_msgs.msg import DetectedHumanArray, ConfirmedTarget
 from go2_intent_grounding.fusion import compute_fused_score
 
 
