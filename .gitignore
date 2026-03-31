@@ -38,3 +38,7 @@ Thumbs.db
 # Secrets / config
 config.py
 .env
+
+# AI agent instruction and planning files — keep local only
+AGENTS.md
+docs/codex_*.md
