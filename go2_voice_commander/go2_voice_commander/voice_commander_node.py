@@ -33,6 +33,25 @@ COMMAND_MAP = {
 }
 
 
+def compute_chunk_energy(chunk: np.ndarray) -> float:
+    """Return mean-square energy without int16 overflow."""
+    chunk_f32 = chunk.astype(np.float32, copy=False)
+    return float(np.mean(np.square(chunk_f32)))
+
+
+def parse_command(transcript: str) -> str | None:
+    """Map free-form transcript text to a normalized command."""
+    transcript = transcript.strip().lower()
+    for trigger, cmd in COMMAND_MAP.items():
+        if trigger in transcript:
+            return cmd
+
+    for wake in WAKE_WORDS:
+        if wake in transcript:
+            return "come here"
+    return None
+
+
 class VoiceCommanderNode(Node):
     def __init__(self):
         super().__init__("voice_commander_node")
@@ -59,6 +78,7 @@ class VoiceCommanderNode(Node):
         self.pa = pyaudio.PyAudio()
         self.audio_queue = queue.Queue()
         self.running = True
+        self.audio_stream = None
 
         self.listen_thread = threading.Thread(target=self._audio_listener, daemon=True)
         self.process_thread = threading.Thread(target=self._command_processor, daemon=True)
@@ -70,7 +90,7 @@ class VoiceCommanderNode(Node):
     def _audio_listener(self):
         """Continuously captures audio and enqueues chunks that exceed energy threshold."""
         chunk_size = int(self.fs * 0.1)  # 100ms chunks for VAD
-        stream = self.pa.open(
+        self.audio_stream = self.pa.open(
             format=pyaudio.paInt16,
             channels=1,
             rate=self.fs,
@@ -85,9 +105,9 @@ class VoiceCommanderNode(Node):
 
         while self.running:
             try:
-                raw = stream.read(chunk_size, exception_on_overflow=False)
+                raw = self.audio_stream.read(chunk_size, exception_on_overflow=False)
                 chunk = np.frombuffer(raw, dtype=np.int16)
-                energy = np.mean(chunk ** 2)
+                energy = compute_chunk_energy(chunk)
 
                 if energy > self.energy_threshold and not collecting:
                     collecting = True
@@ -104,7 +124,10 @@ class VoiceCommanderNode(Node):
             except Exception as e:
                 self.get_logger().warn(f"Audio listener error: {e}")
 
-        stream.close()
+        if self.audio_stream is not None:
+            self.audio_stream.stop_stream()
+            self.audio_stream.close()
+            self.audio_stream = None
 
     def _command_processor(self):
         """Transcribes audio segments and publishes parsed commands."""
@@ -131,7 +154,7 @@ class VoiceCommanderNode(Node):
                 self.raw_pub.publish(raw_msg)
 
                 # Parse command
-                command = self._parse_command(transcript)
+                command = parse_command(transcript)
                 if command:
                     cmd_msg = String()
                     cmd_msg.data = command
@@ -141,25 +164,14 @@ class VoiceCommanderNode(Node):
             except Exception as e:
                 self.get_logger().error(f"Transcription error: {e}")
 
-    def _parse_command(self, transcript: str) -> str:
-        """
-        Maps transcript to a normalized command string.
-        Returns None if no recognized command found.
-        """
-        # Direct match first
-        for trigger, cmd in COMMAND_MAP.items():
-            if trigger in transcript:
-                return cmd
-
-        # Check wake words — if present, treat as implicit "come here"
-        for wake in WAKE_WORDS:
-            if wake in transcript:
-                return "come here"
-
-        return None
-
     def destroy_node(self):
         self.running = False
+        self.listen_thread.join(timeout=2.0)
+        self.process_thread.join(timeout=2.0)
+        if self.audio_stream is not None:
+            self.audio_stream.stop_stream()
+            self.audio_stream.close()
+            self.audio_stream = None
         self.pa.terminate()
         super().destroy_node()
 
