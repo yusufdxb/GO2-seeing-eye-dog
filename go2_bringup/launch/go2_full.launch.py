@@ -1,29 +1,73 @@
-"""
-GO2 Full System Launch File
-Launches the complete GO2 seeing-eye-dog ROS 2 stack.
+"""Full bringup for the real GO2 sensing and guidance stack."""
 
-Usage:
-  ros2 launch go2_bringup go2_full.launch.py
-  ros2 launch go2_bringup go2_full.launch.py use_sim:=true
-"""
+from pathlib import Path
 
+from ament_index_python.packages import PackageNotFoundError, get_package_share_directory
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, GroupAction
+from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition, UnlessCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
-from launch_ros.actions import Node, PushRosNamespace
+from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
+
+
+def _preflight_checks(context):
+    use_sim = LaunchConfiguration("use_sim").perform(context).lower() == "true"
+    required_packages = ["go2_bringup"]
+    if not use_sim:
+        required_packages.extend(
+            [
+                "go2_audio_perception",
+                "go2_perception",
+                "go2_intent_grounding",
+                "go2_safety_monitor",
+                "go2_voice_commander",
+                "go2_navigation",
+                "nav2_bringup",
+                "realsense2_camera",
+            ]
+        )
+
+    missing_packages = []
+    for package_name in required_packages:
+        try:
+            get_package_share_directory(package_name)
+        except PackageNotFoundError:
+            missing_packages.append(package_name)
+
+    if missing_packages:
+        raise RuntimeError(
+            "Missing required ROS packages for bringup: "
+            + ", ".join(sorted(missing_packages))
+        )
+
+    if not use_sim:
+        bt_xml = (
+            Path(get_package_share_directory("go2_navigation"))
+            / "behavior_trees"
+            / "navigate_to_pose_recovery.xml"
+        )
+        if not bt_xml.exists():
+            raise RuntimeError(f"Missing Nav2 behavior tree file: {bt_xml}")
+    return []
 
 
 def generate_launch_description():
     use_sim = LaunchConfiguration("use_sim")
     log_level = LaunchConfiguration("log_level")
+    nav2_bt_xml = PathJoinSubstitution(
+        [
+            FindPackageShare("go2_navigation"),
+            "behavior_trees",
+            "navigate_to_pose_recovery.xml",
+        ]
+    )
 
     declare_use_sim = DeclareLaunchArgument(
         "use_sim",
         default_value="false",
-        description="Use Gazebo simulation instead of real hardware",
+        description="Set true only to get an explicit fail-fast simulation shutdown.",
     )
     declare_log_level = DeclareLaunchArgument(
         "log_level",
@@ -44,6 +88,7 @@ def generate_launch_description():
         ],
         output="screen",
         arguments=["--ros-args", "--log-level", log_level],
+        condition=UnlessCondition(use_sim),
     )
 
     # ── Voice Commander ─────────────────────────────────────────────────
@@ -59,6 +104,7 @@ def generate_launch_description():
         ],
         output="screen",
         arguments=["--ros-args", "--log-level", log_level],
+        condition=UnlessCondition(use_sim),
     )
 
     # ── Perception (YOLOv8 + depth) ────────────────────────────────────
@@ -73,6 +119,7 @@ def generate_launch_description():
         ],
         output="screen",
         arguments=["--ros-args", "--log-level", log_level],
+        condition=UnlessCondition(use_sim),
     )
 
     # ── Safety Monitor ──────────────────────────────────────────────────
@@ -86,6 +133,7 @@ def generate_launch_description():
         ],
         output="screen",
         arguments=["--ros-args", "--log-level", log_level],
+        condition=UnlessCondition(use_sim),
     )
 
     # ── Intent Grounding ────────────────────────────────────────────────
@@ -102,6 +150,7 @@ def generate_launch_description():
         ],
         output="screen",
         arguments=["--ros-args", "--log-level", log_level],
+        condition=UnlessCondition(use_sim),
     )
 
     # ── RealSense Camera (real hardware only) ───────────────────────────
@@ -136,7 +185,9 @@ def generate_launch_description():
                 FindPackageShare("go2_navigation"),
                 "config", "nav2_params.yaml"
             ]),
+            "default_nav_to_pose_bt_xml": nav2_bt_xml,
         }.items(),
+        condition=UnlessCondition(use_sim),
     )
 
     # ── Simulation (Gazebo) ──────────────────────────────────────────────
@@ -153,6 +204,7 @@ def generate_launch_description():
     return LaunchDescription([
         declare_use_sim,
         declare_log_level,
+        OpaqueFunction(function=_preflight_checks),
         sim_launch,
         realsense_launch,
         audio_perception_node,

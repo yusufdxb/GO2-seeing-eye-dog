@@ -19,6 +19,12 @@ MIC_SPACING = 0.05  # 5 cm between adjacent mics
 SPEED_OF_SOUND = 343.0  # m/s at ~20°C
 
 
+def compute_channel_energy(samples: np.ndarray) -> float:
+    """Return mean-square energy without integer overflow."""
+    samples_f32 = samples.astype(np.float32, copy=False)
+    return float(np.mean(np.square(samples_f32)))
+
+
 def gcc_phat(sig1: np.ndarray, sig2: np.ndarray, fs: int, max_tau: float) -> float:
     """
     Generalized Cross-Correlation with Phase Transform.
@@ -102,7 +108,7 @@ class AudioPerceptionNode(Node):
             return
 
         # Energy gate — only process if signal is loud enough
-        energy = np.mean(audio[:, 0] ** 2)
+        energy = compute_channel_energy(audio[:, 0])
         if energy < self.energy_threshold:
             return
 

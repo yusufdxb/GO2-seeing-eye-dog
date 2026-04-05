@@ -16,7 +16,10 @@
   <exec_depend>go2_safety_monitor</exec_depend>
   <exec_depend>go2_voice_commander</exec_depend>
   <exec_depend>go2_gait_controller</exec_depend>
+  <exec_depend>go2_navigation</exec_depend>
   <exec_depend>go2_msgs</exec_depend>
+  <exec_depend>nav2_bringup</exec_depend>
+  <exec_depend>realsense2_camera</exec_depend>
 
   <export>
     <build_type>ament_python</build_type>

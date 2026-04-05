@@ -17,6 +17,7 @@ import pytest
 from go2_audio_perception.audio_perception_node import (
     MIC_SPACING,
     SPEED_OF_SOUND,
+    compute_channel_energy,
     gcc_phat,
 )
 
@@ -39,6 +40,12 @@ def _make_delayed_pair(delay_samples: int, n: int = FS, snr_db: float = 30.0):
 
 
 class TestGccPhat:
+    def test_compute_channel_energy_avoids_int16_overflow(self):
+        """Energy calculation must not wrap on loud int16 samples."""
+        samples = np.array([30000, -30000], dtype=np.int16)
+        energy = compute_channel_energy(samples)
+        assert energy == pytest.approx(900000000.0)
+
     def test_zero_delay_returns_near_zero(self):
         """Identical signals must yield tau ≈ 0."""
         tone = np.sin(2 * np.pi * 1000 * np.arange(FS) / FS)
