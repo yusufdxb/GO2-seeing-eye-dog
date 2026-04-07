@@ -2,10 +2,10 @@
 """Set GO2 joints to stand pose via Gazebo service, then exit."""
 
 import sys
-import rclpy
-from rclpy.node import Node
-from gazebo_msgs.srv import SetModelConfiguration
 
+import rclpy
+from gazebo_msgs.srv import SetModelConfiguration
+from rclpy.node import Node
 
 JOINT_NAMES = [
     'lf_hip_joint', 'lf_upper_leg_joint', 'lf_lower_leg_joint',
