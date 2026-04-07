@@ -62,7 +62,7 @@ jobs:
           rosdep init || true
           rosdep update
           rosdep install --from-paths . --ignore-src -r -y --rosdistro humble
-          pip install --break-system-packages ultralytics opencv-python-headless pyaudio scipy numpy
+          pip install ultralytics opencv-python-headless pyaudio scipy numpy
       - name: Build msgs first, then packages
         run: |
           . /opt/ros/humble/setup.sh
