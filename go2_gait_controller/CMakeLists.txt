@@ -65,7 +65,7 @@ install(DIRECTORY include/
   DESTINATION include
 )
 
-install(DIRECTORY launch config
+install(DIRECTORY launch config worlds scripts
   DESTINATION share/${PROJECT_NAME}
 )
 
