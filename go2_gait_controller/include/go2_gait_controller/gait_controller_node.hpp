@@ -31,10 +31,10 @@
 #include "rclcpp_lifecycle/lifecycle_publisher.hpp"
 
 #include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/float64_multi_array.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
 #include "trajectory_msgs/msg/joint_trajectory_point.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
-#include "geometry_msgs/msg/twist.hpp"
 
 namespace go2_gait_controller
 {
@@ -113,10 +113,10 @@ private:
   // ── Control loop ────────────────────────────────────────
   void control_loop();
 
-  // ── Gait generation ─────────────────────────────────────
-  trajectory_msgs::msg::JointTrajectory generate_stand_trajectory();
-  trajectory_msgs::msg::JointTrajectory generate_walk_trajectory(double phase);
-  trajectory_msgs::msg::JointTrajectory generate_trot_trajectory(double phase);
+  // ── Gait generation (returns 12 joint positions) ────────
+  std::vector<double> generate_stand_positions();
+  std::vector<double> generate_walk_positions(double phase);
+  std::vector<double> generate_trot_positions(double phase);
 
   // ── Foot trajectory (swing/stance) ──────────────────────
   double compute_swing_height(double phase, double stride_height) const;

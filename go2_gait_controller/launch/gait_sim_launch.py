@@ -66,6 +66,10 @@ def generate_launch_description():
 
     gzclient = ExecuteProcess(
         cmd=['gzclient'],
+        additional_env={
+            'LIBGL_DRI3_DISABLE': '1',
+            'OGRE_RTT_MODE': 'Copy',
+        },
         output='screen',
     )
     delayed_gzclient = TimerAction(period=6.0, actions=[gzclient])
