@@ -23,14 +23,12 @@ from launch.actions import (
     TimerAction,
 )
 from launch.event_handlers import OnProcessExit
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import PathJoinSubstitution
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
 
 def generate_launch_description():
-    use_sim_time = LaunchConfiguration('use_sim_time')
-
     gait_share = get_package_share_directory('go2_gait_controller')
     go2_desc_share = get_package_share_directory('go2_description')
 
