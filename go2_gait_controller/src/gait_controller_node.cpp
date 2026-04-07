@@ -27,8 +27,23 @@ GaitControllerNode::GaitControllerNode(const rclcpp::NodeOptions & options)
   this->declare_parameter("hip_length",        0.0838);
   this->declare_parameter("thigh_length",      0.213);
   this->declare_parameter("calf_length",       0.213);
+  this->declare_parameter("auto_activate",     true);
 
   RCLCPP_INFO(get_logger(), "GaitControllerNode constructed.");
+
+  // Auto-activate for simulation use: configure + activate immediately
+  // so the effort PID is ready before physics starts.
+  bool auto_activate = this->get_parameter("auto_activate").as_bool();
+  if (auto_activate) {
+    RCLCPP_INFO(get_logger(), "Auto-activating (auto_activate=true)...");
+    auto cfg_ret = on_configure(get_current_state());
+    if (cfg_ret == CallbackReturn::SUCCESS) {
+      auto act_ret = on_activate(get_current_state());
+      if (act_ret == CallbackReturn::SUCCESS) {
+        RCLCPP_INFO(get_logger(), "Auto-activation complete.");
+      }
+    }
+  }
 }
 
 // ── Lifecycle: configure ──────────────────────────────────────
@@ -77,10 +92,11 @@ CallbackReturn GaitControllerNode::on_activate(const rclcpp_lifecycle::State &)
     std::chrono::duration_cast<std::chrono::nanoseconds>(period),
     std::bind(&GaitControllerNode::control_loop, this));
 
-  current_state_ = GaitState::IDLE;
-  phase_         = 0.0;
+  current_state_   = GaitState::STAND;
+  phase_           = 0.0;
+  stand_published_ = false;
 
-  RCLCPP_INFO(get_logger(), "Active. State: IDLE");
+  RCLCPP_INFO(get_logger(), "Active. State: STAND (auto-hold)");
   return CallbackReturn::SUCCESS;
 }
 
@@ -157,7 +173,8 @@ GaitControllerNode::generate_stand_trajectory()
   trajectory_msgs::msg::JointTrajectoryPoint point;
   point.positions  = STAND_POSE;
   point.velocities.assign(12, 0.0);
-  point.time_from_start = rclcpp::Duration::from_seconds(0.5);
+  point.time_from_start = rclcpp::Duration::from_seconds(
+    1.0 / control_frequency_);
 
   traj.points.push_back(point);
   return traj;
@@ -329,9 +346,10 @@ void GaitControllerNode::transition_to(GaitState new_state)
     gait_state_to_string(current_state_).c_str(),
     gait_state_to_string(new_state).c_str());
 
-  // Reset phase on any transition
-  phase_         = 0.0;
-  current_state_ = new_state;
+  // Reset phase and stand flag on any transition
+  phase_           = 0.0;
+  stand_published_ = false;
+  current_state_   = new_state;
 }
 
 std::string GaitControllerNode::gait_state_to_string(GaitState state) const
