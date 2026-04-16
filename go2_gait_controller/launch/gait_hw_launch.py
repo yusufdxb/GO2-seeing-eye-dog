@@ -59,7 +59,6 @@ def generate_launch_description():
     )
 
     # Hardware bridge — translates gait commands to real GO2 API
-    gait_share = FindPackageShare('go2_gait_controller')
     hw_bridge = Node(
         package='go2_gait_controller',
         executable='hw_bridge.py',

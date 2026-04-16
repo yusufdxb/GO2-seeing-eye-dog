@@ -23,14 +23,11 @@ Author: Yusuf Guenena
 """
 
 import json
-import math
 
 import rclpy
 from rclpy.node import Node
-from std_msgs.msg import String, Float64MultiArray
-from sensor_msgs.msg import JointState
+from std_msgs.msg import String
 from trajectory_msgs.msg import JointTrajectory
-
 
 # Joint name mapping: gait controller (CHAMP) -> Unitree low-level motor IDs
 # Unitree GO2 motor order: FR(0-2), FL(3-5), RR(6-8), RL(9-11)
