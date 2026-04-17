@@ -6,7 +6,7 @@ This repository is for the hardware path. It is not the simulation workspace.
 
 ## Status
 
-**Active thesis development — Unitree GO2 EDU + Jetson Orin Nano**
+**Active thesis development — Unitree GO2 EDU + Jetson Orin NX (16 GB)**
 
 | Component | State |
 |---|---|
