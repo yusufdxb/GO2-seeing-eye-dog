@@ -10,6 +10,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ConfirmedTarget.msg"
   "msg/DetectedHuman.msg"
   "msg/DetectedHumanArray.msg"
+  "msg/PipelineMetrics.msg"
   "msg/SafetyAlert.msg"
   DEPENDENCIES geometry_msgs std_msgs
 )

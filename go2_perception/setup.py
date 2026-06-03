@@ -19,6 +19,7 @@ setup(
     entry_points={
         'console_scripts': [
             'perception_node = go2_perception.perception_node:main',
+            'pipeline_metrics_logger = go2_perception.pipeline_metrics_logger:main',
         ],
     },
 )

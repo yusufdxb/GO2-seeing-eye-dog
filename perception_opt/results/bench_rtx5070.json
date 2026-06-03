@@ -1,0 +1,76 @@
+{
+  "platform": {
+    "device": "NVIDIA GeForce RTX 5070",
+    "compute_capability": "120",
+    "host": "mewtwo",
+    "note": "RTX 5070 only (ablation config 8). Jetson configs BLOCKED-HW."
+  },
+  "config": {
+    "iters": 1000,
+    "warmup": 100,
+    "resolution": "640x480"
+  },
+  "kernel1_pointcloud": {
+    "numpy": {
+      "n": 1000,
+      "mean_ms": 2.246644676,
+      "std_ms": 0.0596350173023453,
+      "p50_ms": 2.2355035,
+      "p95_ms": 2.322781,
+      "p99_ms": 2.4465399,
+      "min_ms": 2.179009,
+      "max_ms": 3.214975
+    },
+    "cupy_wall": {
+      "n": 1000,
+      "mean_ms": 0.049743454,
+      "std_ms": 0.010723972547982581,
+      "p50_ms": 0.050204,
+      "p95_ms": 0.05221805,
+      "p99_ms": 0.06148160999999987,
+      "min_ms": 0.042859,
+      "max_ms": 0.230774
+    },
+    "speedup_numpy_over_cupy": 45.165
+  },
+  "kernel2_fused_safety": {
+    "original_numpy": {
+      "n": 1000,
+      "mean_ms": 0.612808944,
+      "std_ms": 0.02543948797760804,
+      "p50_ms": 0.607151,
+      "p95_ms": 0.64460545,
+      "p99_ms": 0.7767897,
+      "min_ms": 0.596007,
+      "max_ms": 0.816131
+    },
+    "optimized_numpy": {
+      "n": 1000,
+      "mean_ms": 0.191081323,
+      "std_ms": 0.007481724935111621,
+      "p50_ms": 0.189411,
+      "p95_ms": 0.1968675,
+      "p99_ms": 0.22793741,
+      "min_ms": 0.185535,
+      "max_ms": 0.279863
+    },
+    "cupy_wall": {
+      "n": 1000,
+      "mean_ms": 0.18626224100000002,
+      "std_ms": 0.017037886655008567,
+      "p50_ms": 0.183866,
+      "p95_ms": 0.211861,
+      "p99_ms": 0.24539641,
+      "min_ms": 0.166536,
+      "max_ms": 0.359022
+    },
+    "speedup_orig_over_opt": 3.207,
+    "speedup_opt_over_cupy": 1.026,
+    "speedup_orig_over_cupy": 3.29
+  },
+  "kernel_launch_overhead": {
+    "mean_us": 2.586255989735946,
+    "p50_us": 2.400000113993883,
+    "p99_us": 4.928639805875718
+  }
+}

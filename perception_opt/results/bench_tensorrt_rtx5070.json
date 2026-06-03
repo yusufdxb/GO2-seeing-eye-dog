@@ -1,0 +1,32 @@
+{
+  "platform": {
+    "device": "NVIDIA GeForce RTX 5070",
+    "note": "RTX 5070 only (config 8). Jetson engine BLOCKED-HW."
+  },
+  "blocked_hw": [
+    "mAP validation (no real GO2 test set)",
+    "INT8 calibration (no 500+ real frames)",
+    "Jetson FP16/INT8 engine + latency"
+  ],
+  "export_seconds": 249.4,
+  "engine_path": "/home/yusuf/Projects/pythonclass/yolov8n.engine",
+  "pytorch_fp32_cuda": {
+    "n": 500,
+    "mean_ms": 2.1798884519999997,
+    "std_ms": 0.1485642176677133,
+    "p50_ms": 2.1203779999999997,
+    "p95_ms": 2.4972104499999994,
+    "p99_ms": 2.740264919999999,
+    "min_ms": 2.091563
+  },
+  "tensorrt_fp16": {
+    "n": 500,
+    "mean_ms": 1.3853379139999997,
+    "std_ms": 0.029201822827532597,
+    "p50_ms": 1.379385,
+    "p95_ms": 1.4189990499999998,
+    "p99_ms": 1.52338231,
+    "min_ms": 1.35528
+  },
+  "speedup_pt_over_trt": 1.574
+}
