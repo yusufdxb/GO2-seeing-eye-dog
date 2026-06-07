@@ -1,4 +1,4 @@
-# Dataset — GO2 Seeing-Eye Dog
+# Dataset: GO2 Seeing-Eye Dog
 
 Documents the dataset collection protocol, annotation approach, and class breakdown
 for the custom YOLOv8 perception model used in this project.
@@ -65,9 +65,9 @@ Gaussian blur (σ ≤ 1.5), random crop (±10%), hue/saturation shift.
 
 | Split | `owner_person` | `wrist_marker` | `phone_marker` | `follow_marker` | Total frames |
 |-------|---------------|---------------|---------------|----------------|-------------|
-| Train | — | — | — | — | — |
-| Val   | — | — | — | — | — |
-| Test  | — | — | — | — | — |
+| Train |, |, |, |, |, |
+| Val   |, |, |, |, |, |
+| Test  |, |, |, |, |, |
 
 ## Directory Layout
 

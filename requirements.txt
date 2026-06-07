@@ -1,4 +1,4 @@
-# GO2 Seeing-Eye Dog — Python Dependencies
+# GO2 Seeing-Eye Dog: Python Dependencies
 
 # Core ROS 2 Python client (installed with ROS 2 Humble)
 # rclpy

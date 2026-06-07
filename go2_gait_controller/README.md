@@ -13,7 +13,7 @@ for the Unitree GO2 quadruped. Part of the
 ## What This Does
 
 Implements a **gait state machine** with four states and closed-form
-**3-DOF leg inverse kinematics** — all in real-time C++.
+**3-DOF leg inverse kinematics**: all in real-time C++.
 
 ```
 /go2/gait_command (std_msgs/String)
@@ -40,10 +40,10 @@ Implements a **gait state machine** with four states and closed-form
 
 | State | Description | Frequency |
 |---|---|---|
-| `IDLE` | Powered, no motion | — |
-| `STAND` | Standing, joints locked at nominal pose | — |
-| `WALK` | Lateral sequence gait — slow, stable | 1.5 Hz |
-| `TROT` | Diagonal pair gait — faster, efficient | 2.5 Hz |
+| `IDLE` | Powered, no motion |, |
+| `STAND` | Standing, joints locked at nominal pose |, |
+| `WALK` | Lateral sequence gait, slow, stable | 1.5 Hz |
+| `TROT` | Diagonal pair gait, faster, efficient | 2.5 Hz |
 
 ---
 
@@ -54,13 +54,13 @@ Implements a **gait state machine** with four states and closed-form
 ROS 2 Lifecycle Nodes are the professional standard for safety-critical
 systems. They enforce a strict state machine (Unconfigured → Inactive →
 Active) so the controller can only publish when fully configured and
-explicitly activated — preventing accidental motion on startup.
+explicitly activated, preventing accidental motion on startup.
 
 ### Leg IK
 
 Each leg uses **3-DOF closed-form IK**:
-- **Hip abduction** — lateral foot placement
-- **Thigh + calf** — sagittal plane IK using cosine rule
+- **Hip abduction**: lateral foot placement
+- **Thigh + calf**: sagittal plane IK using cosine rule
 
 ```
 cos(calf) = (r² - L_thigh² - L_calf²) / (2 · L_thigh · L_calf)
@@ -130,10 +130,10 @@ ros2 topic pub /go2/gait_command std_msgs/msg/String "data: 'idle'"  --once
 Key parameters in `config/gait_params.yaml`:
 
 ```yaml
-control_frequency: 50.0   # Hz — increase for smoother motion
-hip_length:   0.0838      # m — GO2 hip abduction offset
-thigh_length: 0.213       # m — GO2 thigh link
-calf_length:  0.213       # m — GO2 calf link
+control_frequency: 50.0   # Hz, increase for smoother motion
+hip_length:   0.0838      # m, GO2 hip abduction offset
+thigh_length: 0.213       # m, GO2 thigh link
+calf_length:  0.213       # m, GO2 calf link
 ```
 
 Gait parameters (stride length, height, frequency) are in the header:

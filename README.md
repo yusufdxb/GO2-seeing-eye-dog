@@ -6,7 +6,7 @@ This repository is for the hardware path. It is not the simulation workspace.
 
 ## Status
 
-**Active thesis development — Unitree GO2 EDU + Jetson Orin NX (16 GB)**
+**Active thesis development, Unitree GO2 EDU + Jetson Orin NX (16 GB)**
 
 | Component | State |
 |---|---|
@@ -17,7 +17,7 @@ This repository is for the hardware path. It is not the simulation workspace.
 | Safety monitor (depth-based hazard detection) | Implemented |
 | Gait controller (C++ lifecycle node) | Implemented, CI build passing |
 | Nav2 config and behavior trees | Configured, not yet validated on hardware |
-| End-to-end hardware validation | In progress — live sensor TF and Nav2 runtime pending |
+| End-to-end hardware validation | In progress, live sensor TF and Nav2 runtime pending |
 
 Dataset collection for custom-trained perception models is in progress. See [DATA.md](DATA.md).
 
