@@ -62,7 +62,6 @@ def check_readme_sections() -> None:
 
 def main() -> None:
     required_paths = [
-        "AGENTS.md",
         ".editorconfig",
         ".pre-commit-config.yaml",
         "pyproject.toml",

@@ -136,4 +136,3 @@ USE_SIM=true ./scripts/run.sh
 - `docs/ros_graph.md`
 - `docs/hardware_assumptions.md`
 - `docs/release_checklist.md`
-- `AGENTS.md`
