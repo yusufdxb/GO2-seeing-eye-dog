@@ -135,4 +135,3 @@ USE_SIM=true ./scripts/run.sh
 - `docs/debugging.md`
 - `docs/ros_graph.md`
 - `docs/hardware_assumptions.md`
-- `docs/release_checklist.md`

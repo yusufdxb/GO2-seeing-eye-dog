@@ -73,7 +73,6 @@ def main() -> None:
         "scripts/ros_inspect.sh",
         "docs/architecture.md",
         "docs/debugging.md",
-        "docs/release_checklist.md",
         "docs/ros_graph.md",
         "docs/hardware_assumptions.md",
         "go2_bringup/launch/sim_launch.py",
