@@ -1,4 +1,4 @@
-# GO2 Gait Controller (C++) 🦾
+# GO2 Gait Controller (C++)
 
 A **ROS 2 C++ Lifecycle Node** implementing a real-time gait state machine
 for the Unitree GO2 quadruped. Part of the
