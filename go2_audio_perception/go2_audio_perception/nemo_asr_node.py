@@ -87,11 +87,7 @@ class NemoASRNode(Node):
             input_signal = torch.tensor(audio_segment).unsqueeze(0).to(self.device)
             input_signal_len = torch.tensor([len(audio_segment)]).to(self.device)
 
-            # EncDecCTCModelBPE has transcribe method which is easier
-            # but for streaming we might want manual forward if we had cache
-            # Let's use a temporary file-less approach if possible or simple transcribe
-            # Actually, transcribe() usually takes a list of paths.
-            # For raw tensors, we can use forward() and decode.
+            # transcribe() takes file paths; raw tensors go through forward() + decode.
 
             log_probs, encoded_len, greedy_predictions = self.asr_model(
                 input_signal=input_signal, input_signal_length=input_signal_len
