@@ -62,7 +62,8 @@ jobs:
           rosdep init || true
           rosdep update
           rosdep install --from-paths . --ignore-src -r -y --rosdistro humble
-          pip install ultralytics opencv-python-headless pyaudio scipy numpy
+          # colcon-core needs setuptools<80; unpinned ultralytics/torch pull in 83+.
+          pip install "setuptools<80" ultralytics opencv-python-headless pyaudio scipy numpy
       - name: Build msgs first, then packages
         run: |
           . /opt/ros/humble/setup.sh
