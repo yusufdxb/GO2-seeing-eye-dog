@@ -546,6 +546,9 @@ class HardwareBridgeNode(Node):
         elif self._avoid_busy:
             # Transport switch in progress: no motion until it is verified or failed.
             self._stop(now, ["AVOIDANCE_SWITCHING"])
+        elif self._adapter.avoidance_info().get("fault"):
+            # A failed disable left the robot's avoidance switch unverified: stops only.
+            self._stop(now, ["AVOIDANCE_FAULT"])
         else:
             ok = self._adapter.send_velocity(vx, vy, wz)
             self._last_tx = (vx, vy, wz)

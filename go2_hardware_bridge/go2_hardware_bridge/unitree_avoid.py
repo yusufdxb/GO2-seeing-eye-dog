@@ -74,6 +74,7 @@ class UnitreeAvoidBridge(UnitreeSportBridge):
         self._transport = TRANSPORT_SPORT
         #: Last VERIFIED switch value; None = unknown (never read, or unverified after a failure).
         self._switch_value: Optional[bool] = None
+        self._fault: Optional[str] = None
         #: Switch value read at connect; None = unknown.
         self._prior: Optional[bool] = None
         self._prior_req_id: Optional[int] = None
@@ -92,6 +93,7 @@ class UnitreeAvoidBridge(UnitreeSportBridge):
             "enabled": self._transport == TRANSPORT_AVOID,
             "transport": self._transport,
             "prior_value": "unknown" if self._prior is None else str(self._prior).lower(),
+            "fault": self._fault,
         }
 
     def _log(self, level: str, text: str) -> None:
@@ -199,8 +201,14 @@ class UnitreeAvoidBridge(UnitreeSportBridge):
                 self._switch_value = None  # unverified
                 if enable:
                     self._transport = TRANSPORT_SPORT
+                else:
+                    # A failed disable leaves the robot's switch unknown while velocity
+                    # would still go to obstacles_avoid: latch a fault so the node sends
+                    # only stops until a later switch is verified (review 2026-10-06).
+                    self._fault = f"disable unverified: {exc}"
                 self._log("error", f"obstacles_avoid switch failed: {exc}")
                 return False, str(exc)
+            self._fault = None
             self._switch_value = enable
             if enable:
                 self._maybe_send_remote_command(True)

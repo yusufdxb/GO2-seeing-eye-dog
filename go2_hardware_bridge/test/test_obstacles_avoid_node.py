@@ -252,6 +252,27 @@ def test_disable_end_to_end(graph):
     assert robot.avoid[-2][1] == {"enable": False}
 
 
+def test_failed_disable_sends_only_stops_until_verified(graph, safe_sender):
+    # Review 2026-10-06: after an unverified disable the switch state is unknown, so the
+    # bridge must not keep forwarding velocity on the avoid transport.
+    node, robot = _bridge(graph)
+    _cn, call = _client(graph)
+    graph.spin_for(0.3)
+    assert call(True).success
+    robot.mode = "mismatch"
+    assert not call(False).success
+    assert node._adapter.avoidance_info()["fault"]
+    n_avoid, n_sport = len(robot.avoid), len(robot.sport)
+    _drive(graph, lambda: safe_sender(0.2), 0.5)
+    moved = [p for a, p, _n in robot.avoid[n_avoid:] if a == 1003 and p["x"] != 0.0]
+    assert not moved, "velocity forwarded on avoid transport after a failed disable"
+    assert not [a for a, _p, _n in robot.sport[n_sport:] if a == 1008]
+    assert 1001 not in [a for a, _p, _n in robot.sport]
+    robot.mode = "ok"
+    assert call(False).success
+    assert node._adapter.avoidance_info()["fault"] is None
+
+
 def test_unsupported_adapter_is_refused(graph):
     from go2_hardware_bridge.dry_run import DryRunGo2Bridge
     from go2_hardware_bridge.hardware_bridge_node import HardwareBridgeNode

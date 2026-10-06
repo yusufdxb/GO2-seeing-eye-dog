@@ -148,7 +148,8 @@ def test_enable_success_sequence_and_transport():
     assert ok and adapter.transport == "avoid"
     assert avoid_calls(node) == [(1001, {"enable": True}), (1002, {})]
     assert all(n is False for (_t, _a, _p, n) in node.log)  # replies requested
-    assert adapter.avoidance_info() == {"enabled": True, "transport": "avoid", "prior_value": "false"}
+    assert adapter.avoidance_info() == {"enabled": True, "transport": "avoid", "prior_value": "false",
+                                       "fault": None}
 
 
 def test_prior_value_read_at_connect():
@@ -196,6 +197,23 @@ def test_disable_readback_mismatch_reports_failure_and_stays():
     robot.mode = "mismatch"
     ok, _ = enable(adapter, node, on=False)
     assert not ok and adapter.transport == "avoid"
+
+
+def test_failed_disable_latches_a_fault_until_a_verified_switch():
+    adapter, node, robot = make()
+    assert enable(adapter, node)[0]
+    robot.mode = "mismatch"
+    assert not enable(adapter, node, on=False)[0]
+    assert adapter.avoidance_info()["fault"]
+    robot.mode = "ok"
+    assert enable(adapter, node, on=False)[0]
+    assert adapter.avoidance_info()["fault"] is None and adapter.transport == "sport"
+
+
+def test_failed_enable_does_not_latch_a_fault():
+    adapter, node, robot = make(mode="mismatch")
+    assert not enable(adapter, node)[0]
+    assert adapter.avoidance_info()["fault"] is None and adapter.transport == "sport"
 
 
 def test_unreadable_prior_does_not_block_enable():
