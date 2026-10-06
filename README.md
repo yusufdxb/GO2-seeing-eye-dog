@@ -197,7 +197,7 @@ ros2 launch go2_bringup system.launch.py hardware_adapter:=unitree_sport
 ```
 
 Arguments: `perception:=real|none`, `planner:=staged|nav2`,
-`hardware_adapter:=dry_run|unitree_sport`.
+`hardware_adapter:=dry_run|unitree_sport|unitree_avoid`.
 
 `dry_run` is the default everywhere. Selecting a physical adapter has to be
 typed out, and there is no fallback from it: asking for hardware without the
@@ -210,6 +210,43 @@ ros2 topic info /cmd_vel_safe --verbose   # MUST show exactly one publisher
 ros2 topic echo /go2/safety/status        # what the arbiter is deciding, and why
 ros2 topic echo /go2/bridge/status        # what actually reached the actuator
 ```
+
+## Native obstacle avoidance transport (`unitree_avoid`)
+
+`hardware_adapter:=unitree_avoid` is the Sport adapter plus an opt-in velocity
+path through the Unitree `obstacles_avoid` service. It starts on Sport and is
+byte-for-byte `unitree_sport` until a client switches it on:
+
+- Service `/go2/obstacle_avoidance/set` (`std_srvs/srv/SetBool`), `data: true` to enable.
+- Topic `/go2/obstacle_avoidance/state` (`std_msgs/msg/Bool`, reliable, transient_local):
+  true only after a verified read-back.
+- Enable = SwitchSet `{"enable": true}` (api 1001 on `/api/obstacles_avoid/request`),
+  reply code 0, then SwitchGet (api 1002) must read back `{"enable": true}`; only then
+  does velocity go out as obstacles_avoid Move (api 1003, `{"x","y","yaw","mode":0}`,
+  noreply) instead of Sport Move 1008. Any error, timeout or wrong read-back leaves
+  the transport on Sport and the state false. The request is refused while a non-zero
+  velocity was transmitted within `authority_handover_quiet_sec`, and while the
+  adapter does not support it. `dry_run` accepts the request and SIMULATES the switch
+  (it logs the calls to the JSONL record, nothing is transmitted).
+- Stops on the avoid transport send obstacles_avoid Move(0,0,0) and then Sport
+  StopMove. Damp is never sent. Api ids are always handled as (topic, id) pairs
+  because 1001 is Damp on Sport and SwitchSet on obstacles_avoid.
+- The switch is read once at connect and restored to that prior value on node
+  shutdown (if it was known and this node changed it).
+- Parameters: `obstacles_avoid_timeout_sec` (1.5), `obstacles_avoid_api_remote_control`
+  (false). UseRemoteCommandFromApi (api 1004) is sent only when the latter is true.
+- `/diagnostics` adds `obstacle_avoidance_enabled`, `obstacle_avoidance_transport`,
+  `obstacle_avoidance_prior_value`.
+
+**HW-UNVERIFIED** (the only hardware fact: on 2026-09-21 SwitchSet(true) returned
+code 0, SwitchGet read back true, and a zero Move with the switch on produced no
+motion):
+
+- A non-zero Move through obstacles_avoid has never been tested on this GO2.
+- Whether Sport StopMove halts motion commanded through obstacles_avoid is untested.
+- Whether Move works without UseRemoteCommandFromApi (1004) is untested; 1004 may mask
+  the physical remote, so it is off by default.
+- Move modes 1 and 2 and the avoid-mode selector are deliberately unused.
 
 ## Troubleshooting
 

@@ -38,6 +38,7 @@ class DryRunGo2Bridge(HardwareBridgeInterface):
     """
 
     dry_run = True
+    supports_avoidance = True  # SIMULATED switch, no hardware
 
     def __init__(
         self,
@@ -52,6 +53,9 @@ class DryRunGo2Bridge(HardwareBridgeInterface):
         self._records: List[Dict[str, Any]] = []
         self._health = BridgeHealth(state=BridgeState.UNINITIALIZED, connected=False)
         self._fh: Optional[TextIO] = None
+        self._avoid_enabled = False
+        self._avoid_prior: Optional[bool] = None
+        self._avoid_touched = False
 
     # ── Contract ──────────────────────────────────────────────────────
 
@@ -110,6 +114,9 @@ class DryRunGo2Bridge(HardwareBridgeInterface):
 
     def shutdown(self) -> None:
         self.send_zero()
+        if self._avoid_touched and self._avoid_prior is not None and self._avoid_enabled != self._avoid_prior:
+            self._avoid_enabled = self._avoid_prior
+            self._record("avoid_switch_set", 0.0, 0.0, 0.0, True, api_id=1001, enable=self._avoid_prior, restore=True)
         self._record("shutdown", 0.0, 0.0, 0.0, True)
         with self._lock:
             self._health.state = BridgeState.STOPPED
@@ -120,6 +127,26 @@ class DryRunGo2Bridge(HardwareBridgeInterface):
                     self._fh.close()
                 finally:
                     self._fh = None
+
+    # ── Simulated obstacle-avoidance switch (logs the calls, sends nothing) ──
+
+    def avoidance_info(self) -> Dict[str, Any]:
+        return {
+            "enabled": self._avoid_enabled,
+            "transport": "avoid" if self._avoid_enabled else "sport",
+            "prior_value": "unknown" if self._avoid_prior is None else str(self._avoid_prior).lower(),
+        }
+
+    async def set_avoidance(self, enable: bool):
+        enable = bool(enable)
+        if self._avoid_prior is None:
+            self._avoid_prior = False  # simulated robot default: switch off
+            self._record("avoid_switch_get", 0.0, 0.0, 0.0, True, api_id=1002, enable=False, prior=True)
+        self._avoid_touched = True
+        self._record("avoid_switch_set", 0.0, 0.0, 0.0, True, api_id=1001, enable=enable)
+        self._record("avoid_switch_get", 0.0, 0.0, 0.0, True, api_id=1002, enable=enable)
+        self._avoid_enabled = enable
+        return True, f"SIMULATED: obstacle avoidance {'enabled' if enable else 'disabled'} (dry_run, no hardware)"
 
     # ── Test/inspection helpers ───────────────────────────────────────
 
@@ -149,7 +176,7 @@ class DryRunGo2Bridge(HardwareBridgeInterface):
 
     # ── Internals ─────────────────────────────────────────────────────
 
-    def _record(self, kind: str, vx: float, vy: float, wz: float, ok: bool) -> None:
+    def _record(self, kind: str, vx: float, vy: float, wz: float, ok: bool, **extra: Any) -> None:
         entry = {
             "t": self._clock(),
             "kind": kind,
@@ -160,6 +187,7 @@ class DryRunGo2Bridge(HardwareBridgeInterface):
             "adapter": self.name,
             "dry_run": True,
         }
+        entry.update(extra)
         with self._lock:
             self._records.append(entry)
             if self._fh is not None:

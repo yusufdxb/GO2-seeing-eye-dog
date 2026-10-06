@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
+from typing import Any, Dict, Tuple
 
 
 class BridgeState:
@@ -60,9 +61,25 @@ class HardwareBridgeInterface(abc.ABC):
     #: Set True by adapters that do not touch physical hardware.
     dry_run: bool = True
 
+    #: True only for adapters that can switch to a native obstacle-avoidance
+    #: transport (``unitree_avoid``, and ``dry_run`` which simulates it).
+    supports_avoidance: bool = False
+
     @property
     def name(self) -> str:
         return type(self).__name__
+
+    def avoidance_info(self) -> Dict[str, Any]:
+        """enabled (verified), transport ("sport"|"avoid"), prior_value ("true"|"false"|"unknown")."""
+        return {"enabled": False, "transport": "sport", "prior_value": "unknown"}
+
+    async def set_avoidance(self, enable: bool) -> Tuple[bool, str]:
+        """
+        Switch the native obstacle-avoidance transport on or off, verified.
+        A coroutine so the node can await replies without blocking its executor.
+        Returns (success, message). Adapters that cannot do this refuse.
+        """
+        return False, f"{self.name} does not support obstacle avoidance"
 
     @abc.abstractmethod
     def connect(self) -> bool:

@@ -52,10 +52,11 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.qos import DurabilityPolicy, HistoryPolicy, QoSProfile, ReliabilityPolicy
 from rclpy.signals import SignalHandlerOptions
-from std_srvs.srv import Trigger
+from rclpy.callback_groups import ReentrantCallbackGroup
+from std_srvs.srv import SetBool, Trigger
 
 from go2_hardware_bridge.dry_run import DryRunGo2Bridge
-from std_msgs.msg import String
+from std_msgs.msg import Bool, String
 
 from go2_hardware_bridge.motion_authority import ACQUIRED, REVOKED, AuthorityGate
 from go2_hardware_bridge.interface import (
@@ -102,6 +103,10 @@ ESTOP_REASSERT_PERIOD_S = 1.0
 # Bounded re-assertion of a normal (non-emergency) StopMove while the bridge is stopped.
 ZERO_REASSERT_PERIOD_S = 1.0
 
+#: Native obstacle avoidance (Unitree obstacles_avoid). Absolute names: MOSAIC uses these literally.
+AVOID_SERVICE = "/go2/obstacle_avoidance/set"
+AVOID_STATE_TOPIC = "/go2/obstacle_avoidance/state"
+
 CONTROL_QOS = QoSProfile(
     depth=1,
     reliability=ReliabilityPolicy.RELIABLE,
@@ -142,8 +147,30 @@ def build_adapter(node: Node, kind: str, log_path: str) -> HardwareBridgeInterfa
                 node.get_parameter("adapter_discovery_timeout_sec").value
             ),
         )
+    if kind == "unitree_avoid":
+        from go2_hardware_bridge.unitree_avoid import UnitreeAvoidBridge
+
+        return UnitreeAvoidBridge(
+            node,
+            command_hold_sec=float(
+                node.get_parameter("adapter_command_hold_sec").value
+            ),
+            require_subscriber=bool(
+                node.get_parameter("adapter_require_subscriber").value
+            ),
+            discovery_timeout_sec=float(
+                node.get_parameter("adapter_discovery_timeout_sec").value
+            ),
+            api_remote_control=bool(
+                node.get_parameter("obstacles_avoid_api_remote_control").value
+            ),
+            switch_timeout_sec=float(
+                node.get_parameter("obstacles_avoid_timeout_sec").value
+            ),
+            callback_group=getattr(node, "_avoid_group", None),
+        )
     raise HardwareBridgeError(
-        f"Unknown hardware_adapter {kind!r}. Valid values: dry_run, unitree_sport."
+        f"Unknown hardware_adapter {kind!r}. Valid values: dry_run, unitree_sport, unitree_avoid."
     )
 
 
@@ -173,6 +200,12 @@ class HardwareBridgeNode(Node):
         self.declare_parameter("motion_authority_topic", "")
         self.declare_parameter("motion_authority_name", "nav2")
         self.declare_parameter("grant_timeout_s", 0.3)
+        # Native obstacle avoidance (unitree_avoid adapter only).
+        # unit: s | meaning: wait for each obstacles_avoid SwitchSet/SwitchGet reply.
+        self.declare_parameter("obstacles_avoid_timeout_sec", 1.5)
+        # HW-UNVERIFIED: UseRemoteCommandFromApi may mask the physical remote.
+        # Never sent unless this is true.
+        self.declare_parameter("obstacles_avoid_api_remote_control", False)
 
         self._watchdog = float(self.get_parameter("watchdog_timeout_sec").value)
         freq = float(self.get_parameter("control_frequency_hz").value)
@@ -200,6 +233,14 @@ class HardwareBridgeNode(Node):
         # This is the bridge's last line of defence and it must not depend on
         # anything the rest of the graph can stop publishing.
         self._steady_clock = Clock(clock_type=ClockType.STEADY_TIME)
+
+        # Replies, timeouts and the switch service run in their own group so
+        # awaiting a reply never blocks the control timer or the reply itself.
+        self._avoid_group = ReentrantCallbackGroup()
+        self._avoid_busy = False
+        _avoid_timeout = float(self.get_parameter("obstacles_avoid_timeout_sec").value)
+        if not math.isfinite(_avoid_timeout) or _avoid_timeout <= 0.0:
+            raise ValueError(f"obstacles_avoid_timeout_sec must be finite and > 0, got {_avoid_timeout}")
 
         self._adapter = adapter or build_adapter(
             self,
@@ -267,6 +308,11 @@ class HardwareBridgeNode(Node):
         self._status_pub = self.create_publisher(BridgeStatus, "bridge/status", STATUS_QOS)
         self._diag_pub = self.create_publisher(DiagnosticArray, "/diagnostics", 10)
         self.create_service(Trigger, "~/emergency_stop", self._estop_cb)
+        self._avoid_state_pub = self.create_publisher(Bool, AVOID_STATE_TOPIC, STATUS_QOS)
+        self.create_service(
+            SetBool, AVOID_SERVICE, self._avoid_set_cb, callback_group=self._avoid_group
+        )
+        self._publish_avoid_state()
 
         self._timer = self.create_timer(self._period, self._tick)
 
@@ -497,6 +543,9 @@ class HardwareBridgeNode(Node):
             # Non-zero Move only while a fresh grant names this bridge.
             self._authority_dropped += 1
             self._stop(now, ["AUTHORITY_NOT_OWNED"])
+        elif self._avoid_busy:
+            # Transport switch in progress: no motion until it is verified or failed.
+            self._stop(now, ["AVOIDANCE_SWITCHING"])
         else:
             ok = self._adapter.send_velocity(vx, vy, wz)
             self._last_tx = (vx, vy, wz)
@@ -547,6 +596,55 @@ class HardwareBridgeNode(Node):
         resp.message = "bridge emergency stop engaged; restart bridge to clear"
         return resp
 
+    async def _avoid_set_cb(self, req, resp):
+        """
+        /go2/obstacle_avoidance/set. A coroutine: the executor keeps running (control
+        timer, reply subscription) while this awaits the SwitchSet/SwitchGet replies.
+        """
+        enable = bool(req.data)
+        refusal = self._avoid_refusal()
+        if refusal:
+            self.get_logger().warn(f"obstacle avoidance request refused: {refusal}")
+            resp.success, resp.message = False, refusal
+            return resp
+        self._avoid_busy = True
+        try:
+            ok, message = await self._adapter.set_avoidance(enable)
+        except Exception as exc:  # noqa: BLE001
+            ok, message = False, f"obstacle avoidance switch raised: {exc}"
+        finally:
+            self._avoid_busy = False
+        self._publish_avoid_state()
+        resp.success, resp.message = bool(ok), str(message)
+        return resp
+
+    def _avoid_refusal(self) -> str:
+        if not self._adapter.supports_avoidance:
+            return (
+                f"adapter {self._adapter.name} does not support obstacle avoidance "
+                "(use hardware_adapter:=unitree_avoid, or dry_run to simulate)"
+            )
+        if self._avoid_busy:
+            return "obstacle avoidance switch already in progress"
+        if self._estop_engaged:
+            return "bridge emergency stop is latched"
+        now = self._steady_now()
+        if self._commanded_nonzero or (
+            self._last_nonzero_time is not None
+            and (now - self._last_nonzero_time) < self._handover_quiet
+        ):
+            return (
+                "refused: a non-zero velocity was transmitted within "
+                f"authority_handover_quiet_sec={self._handover_quiet:.2f}s"
+            )
+        return ""
+
+    def _publish_avoid_state(self) -> None:
+        # True only after a verified SwitchGet read-back (the adapter owns that).
+        msg = Bool()
+        msg.data = bool(self._adapter.avoidance_info().get("enabled", False))
+        self._avoid_state_pub.publish(msg)
+
     # ── Observability ─────────────────────────────────────────────────
 
     def _publish_status(self, now: float) -> None:
@@ -575,6 +673,7 @@ class HardwareBridgeNode(Node):
         status.hardware_id = self._adapter.name
         moving = any(abs(v) > 1e-9 for v in self._last_tx)
         auth = self._gate.status(now)
+        avoid = self._adapter.avoidance_info()
         if self._estop_engaged or health.state == BridgeState.FAULT:
             status.level = DiagnosticStatus.ERROR
         elif not health.connected or self._last_reject_reasons:
@@ -599,6 +698,9 @@ class HardwareBridgeNode(Node):
             KeyValue(key="authority_owner", value=str(auth["owner"])),
             KeyValue(key="authority_epoch", value=str(auth["epoch"])),
             KeyValue(key="authority_dropped", value=str(self._authority_dropped)),
+            KeyValue(key="obstacle_avoidance_enabled", value=str(bool(avoid.get("enabled", False)))),
+            KeyValue(key="obstacle_avoidance_transport", value=str(avoid.get("transport", "sport"))),
+            KeyValue(key="obstacle_avoidance_prior_value", value=str(avoid.get("prior_value", "unknown"))),
             KeyValue(key="last_vx", value=f"{self._last_tx[0]:.3f}"),
             KeyValue(key="last_vy", value=f"{self._last_tx[1]:.3f}"),
             KeyValue(key="last_wz", value=f"{self._last_tx[2]:.3f}"),
