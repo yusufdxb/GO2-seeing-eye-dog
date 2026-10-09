@@ -14,152 +14,173 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 PKG_DIR = Path(__file__).resolve().parents[1]
 SRC = PKG_DIR / "go2_hardware_bridge" / "stop_watchdog.py"
 
-from go2_hardware_bridge import obstacles_avoid as oa  # noqa: E402
+from go2_hardware_bridge import motion_tx  # noqa: E402
 from go2_hardware_bridge.stop_watchdog import (  # noqa: E402
     ACTION_AVOID_ZERO,
     ACTION_SPORT_STOP,
+    WATCHDOG_ID_TAG,
     StopWatchdogLogic,
-    parameter_is_nonzero,
 )
 
-MOVE, STOP = 1008, 1003
+STOP = 1003
+MOVE = 1008
+MV, SP = motion_tx.KIND_MOVE, motion_tx.KIND_STOP
+SPORT, AVOID = motion_tx.TRANSPORT_SPORT, motion_tx.TRANSPORT_AVOID
 
 
 def kinds(actions):
     return [a.kind for a in actions]
 
 
+def logic(**kw):
+    kw.setdefault("id_base", WATCHDOG_ID_TAG)
+    return StopWatchdogLogic(**kw)
+
+
+def move(w, t, transport=SPORT, seq=1):
+    w.on_motion_tx(MV, transport, seq, t)
+
+
+def drain(w, t0, until, step=0.005):
+    out, t = [], t0
+    while t <= until:
+        out.extend(w.tick(t))
+        t += step
+    return out
+
+
 def test_does_not_fire_before_timeout():
-    w = StopWatchdogLogic(timeout_s=0.25)
-    w.on_sport_request(MOVE, True, 10.0)
-    assert w.armed
-    assert w.tick(10.0) == []
-    assert w.tick(10.25) == []  # exactly at the timeout is not past it
+    w = logic(timeout_s=0.25)
+    move(w, 10.0)
+    assert w.armed and w.armed_since == 10.0
+    assert w.tick(10.0) == [] and w.tick(10.25) == []  # exactly at the timeout is not past it
     assert w.fires == 0
 
 
 def test_fires_exactly_once_after_timeout_with_only_stopmove():
-    w = StopWatchdogLogic(timeout_s=0.25, repeat_n=3, repeat_dt_s=0.02)
-    w.on_sport_request(MOVE, True, 10.0)
-    actions = w.tick(10.26)
-    assert kinds(actions) == [ACTION_SPORT_STOP] * 3
-    assert [round(a.delay_s, 6) for a in actions] == [0.0, 0.02, 0.04]
-    assert w.fires == 1 and w.last_fire_t == 10.26 and not w.armed
+    w = logic(timeout_s=0.25, repeat_n=3, repeat_dt_s=0.02)
+    move(w, 10.0)
+    first = w.tick(10.26)
+    assert kinds(first) == [ACTION_SPORT_STOP]  # round 0 now, the rest are due later
+    assert w.fires == 1 and w.last_fire_t == 10.26 and not w.armed and w.armed_since is None
+    assert w.tick(10.27) == []
+    assert kinds(w.tick(10.28)) == [ACTION_SPORT_STOP]
+    assert kinds(w.tick(10.30)) == [ACTION_SPORT_STOP]
     assert w.tick(10.5) == [] and w.tick(99.0) == []
     assert w.fires == 1
 
 
 def test_refresh_by_further_moves_postpones_the_fire():
-    w = StopWatchdogLogic(timeout_s=0.25)
+    w = logic(timeout_s=0.25)
     for i in range(10):
-        w.on_sport_request(MOVE, True, 10.0 + 0.1 * i)
+        move(w, 10.0 + 0.1 * i, seq=i)
         assert w.tick(10.0 + 0.1 * i + 0.2) == []
-    assert kinds(w.tick(10.9 + 0.26)) == [ACTION_SPORT_STOP] * 3
+    assert w.last_tx_seq == 9
+    assert kinds(w.tick(10.9 + 0.26)) == [ACTION_SPORT_STOP]
 
 
-def test_stopmove_disarms():
-    w = StopWatchdogLogic()
-    w.on_sport_request(MOVE, True, 1.0)
-    w.on_sport_request(STOP, False, 1.1)
-    assert not w.armed
+def test_stop_disarms():
+    w = logic()
+    move(w, 1.0)
+    w.on_motion_tx(SP, SPORT, 2, 1.1)
+    assert not w.armed and w.armed_since is None
     assert w.tick(5.0) == [] and w.fires == 0
 
 
-def test_zero_move_refreshes_but_does_not_arm():
-    w = StopWatchdogLogic(timeout_s=0.25)
-    w.on_sport_request(MOVE, False, 1.0)
-    assert not w.armed and w.tick(5.0) == []
-    # An armed watchdog is kept alive by zero Moves.
-    w.on_sport_request(MOVE, True, 10.0)
-    w.on_sport_request(MOVE, False, 10.2)
-    assert w.tick(10.4) == []
-    assert kinds(w.tick(10.2 + 0.26)) == [ACTION_SPORT_STOP] * 3
-
-
-def test_rearms_on_next_nonzero_move_only():
-    w = StopWatchdogLogic(timeout_s=0.25)
-    w.on_sport_request(MOVE, True, 1.0)
-    assert w.tick(2.0)
-    w.on_sport_request(MOVE, False, 3.0)
+def test_rearms_only_on_next_move():
+    w = logic(timeout_s=0.25)
+    move(w, 1.0)
+    assert drain(w, 2.0, 2.2)
     assert not w.armed and w.tick(9.0) == []
-    w.on_sport_request(MOVE, True, 10.0)
+    move(w, 10.0)
     assert w.armed
-    assert len(w.tick(10.3)) == 3 and w.fires == 2
-
-
-def test_other_sport_apis_are_ignored():
-    w = StopWatchdogLogic()
-    w.on_sport_request(1010, True, 1.0)  # StandUp is not a Move
-    w.on_sport_request(1002, True, 1.0)
-    assert not w.armed
-    w.on_sport_request(MOVE, True, 1.0)
-    w.on_sport_request(1010, False, 1.1)  # does not disarm or refresh
-    assert kinds(w.tick(1.3)) == [ACTION_SPORT_STOP] * 3
+    assert w.tick(10.3) and w.fires == 2
 
 
 def test_repeat_parameters_and_validation():
-    w = StopWatchdogLogic(timeout_s=0.1, repeat_n=5, repeat_dt_s=0.05)
-    w.on_sport_request(MOVE, True, 0.0)
-    assert len(w.tick(0.2)) == 5
+    w = logic(timeout_s=0.1, repeat_n=5, repeat_dt_s=0.05)
+    move(w, 0.0)
+    assert len(drain(w, 0.2, 0.6)) == 5
     for bad in ({"timeout_s": 0.0}, {"repeat_n": 0}, {"repeat_dt_s": -1.0}):
         with pytest.raises(ValueError):
             StopWatchdogLogic(**bad)
 
 
-def test_avoid_move_arms_and_fires_avoid_zero_and_sport_stop():
-    w = StopWatchdogLogic(timeout_s=0.25, repeat_n=2)
-    w.on_avoid_request(oa.API_MOVE, True, 1.0)
-    assert w.armed
-    actions = w.tick(1.3)
-    assert kinds(actions) == [ACTION_AVOID_ZERO, ACTION_SPORT_STOP] * 2
+def test_avoid_move_arms_and_fires_avoid_zero_then_sport_stop():
+    w = logic(timeout_s=0.25, repeat_n=2, repeat_dt_s=0.02)
+    move(w, 1.0, transport=AVOID)
+    out = drain(w, 1.3, 1.5)
+    assert kinds(out) == [ACTION_AVOID_ZERO, ACTION_SPORT_STOP] * 2
     assert not w.armed and w.tick(2.0) == []
 
 
-def test_avoid_service_switch_calls_are_not_motion():
-    """On the avoid service 1001/1002 are the switch, 1003 is Move (not StopMove)."""
-    w = StopWatchdogLogic()
-    for api in (oa.API_SWITCH_SET, oa.API_SWITCH_GET, oa.API_USE_REMOTE_COMMAND_FROM_API):
-        w.on_avoid_request(api, True, 1.0)
-    assert not w.armed
-    w.on_avoid_request(oa.API_MOVE, True, 2.0)
-    # An avoid-service api 1003 is a Move: it never disarms (a Sport 1003 does).
-    w.on_avoid_request(oa.API_MOVE, False, 2.1)
-    assert w.armed
-    w.on_sport_request(STOP, False, 2.2)
-    assert not w.armed
-
-
 def test_sport_only_episode_does_not_touch_the_avoid_service():
-    w = StopWatchdogLogic()
-    w.on_sport_request(MOVE, True, 1.0)
-    assert ACTION_AVOID_ZERO not in kinds(w.tick(2.0))
+    w = logic()
+    move(w, 1.0)
+    assert ACTION_AVOID_ZERO not in kinds(drain(w, 2.0, 2.2))
 
 
 def test_avoid_flag_does_not_leak_into_the_next_episode():
-    w = StopWatchdogLogic()
-    w.on_avoid_request(oa.API_MOVE, True, 1.0)
-    assert w.tick(2.0)
-    w.on_sport_request(MOVE, True, 3.0)
-    assert ACTION_AVOID_ZERO not in kinds(w.tick(4.0))
+    w = logic()
+    move(w, 1.0, transport=AVOID)
+    assert drain(w, 2.0, 2.2)
+    move(w, 3.0)
+    assert ACTION_AVOID_ZERO not in kinds(drain(w, 4.0, 4.2))
 
 
-@pytest.mark.parametrize(
-    "param,expected",
-    [
-        ('{"x":0,"y":0,"z":0}', False),
-        ('{"x":0.0,"y":0.0,"yaw":0.0,"mode":0}', False),
-        ('{"x":1e-7,"y":0,"z":0}', False),
-        ('{"x":0.213,"y":0,"z":-0.011}', True),
-        ('{"x":0,"y":0.1,"z":0}', True),
-        ('{"x":0,"y":0,"z":-0.2}', True),
-        ('{"x":0,"y":0,"yaw":0.3}', True),
-        ("", True),  # unreadable: assume moving
-        ("not json", True),
-        ('{"x":NaN}', True),
-    ],
-)
-def test_parameter_is_nonzero(param, expected):
-    assert parameter_is_nonzero(param) is expected
+def test_new_move_cancels_pending_repeats_of_the_fired_episode():
+    w = logic(timeout_s=0.25, repeat_n=3, repeat_dt_s=0.02)
+    move(w, 10.0)
+    assert len(w.tick(10.26)) == 1  # two repeats still pending
+    move(w, 10.27)  # the bridge is alive again
+    assert w.armed
+    assert drain(w, 10.28, 10.5) == []  # obsolete repeats cancelled, new episode not yet silent
+    assert kinds(drain(w, 10.53, 10.6)) == [ACTION_SPORT_STOP] * 3  # fresh episode fires
+    assert w.fires == 2
+
+
+def test_own_stopmove_loopback_cannot_disarm_a_new_episode():
+    """The watchdog has no raw-topic input: its own StopMove never reaches on_motion_tx."""
+    w = logic(timeout_s=0.25, repeat_n=3, repeat_dt_s=0.02)
+    move(w, 10.0)
+    w.tick(10.26)  # first StopMove published; its loopback would arrive late, after a new Move
+    move(w, 10.265)
+    assert w.armed
+    assert not hasattr(w, "on_sport_request") and not hasattr(w, "on_avoid_request")
+    assert kinds(drain(w, 10.53, 10.6)) == [ACTION_SPORT_STOP] * 3
+
+
+def test_status_carries_ids_armed_since_and_last_seq():
+    w = logic(timeout_s=0.25, repeat_n=3, repeat_dt_s=0.02, id_base=WATCHDOG_ID_TAG + 1000)
+    move(w, 5.0, seq=41)
+    st = w.status()
+    assert st["armed"] and st["armed_since"] == 5.0 and st["last_tx_seq"] == 41
+    out = drain(w, 5.3, 5.5)
+    st = w.status()
+    ids = [a.request_id for a in out]
+    assert st["last_fire_ids"] == ids == sorted(set(ids)) and len(ids) == 3
+    assert all(i & WATCHDOG_ID_TAG for i in ids) and all(i < 2**63 for i in ids)
+    assert st["fires"] == 1 and st["armed_since"] is None
+    json.dumps(st)
+
+
+def test_default_ids_are_tagged_and_above_bridge_ids():
+    from go2_hardware_bridge.stop_watchdog import default_id_base
+
+    bridge_style = int(time.time_ns() // 1000) * 1000 + 999
+    assert default_id_base() & WATCHDOG_ID_TAG and not bridge_style & WATCHDOG_ID_TAG
+
+
+def test_motion_tx_codec():
+    assert motion_tx.decode(motion_tx.encode(MV, AVOID, 7)) == (MV, AVOID, 7)
+    for bad in ("", "x", "{}", '{"kind":"go","transport":"sport","seq":1}',
+                '{"kind":"move","transport":"x","seq":1}',
+                '{"kind":"move","transport":"sport","seq":"1"}', None):
+        assert motion_tx.decode(bad) is None
+    assert not motion_tx.velocity_is_nonzero({"x": 0, "y": 0.0, "z": 1e-7})
+    assert not motion_tx.velocity_is_nonzero({"x": 0.0, "y": 0.0, "yaw": 0.0, "mode": 0})
+    assert motion_tx.velocity_is_nonzero({"x": 0.213, "y": 0, "z": -0.011})
+    assert motion_tx.velocity_is_nonzero({"yaw": 0.3}) and motion_tx.velocity_is_nonzero(None)
 
 
 # ── Static properties of the module source ───────────────────────────────
@@ -185,9 +206,13 @@ def test_source_has_no_damp_and_builds_only_stop_and_zero_requests():
                 for k, v in zip(node.keys, node.values):
                     if k.value in ("x", "y", "z", "yaw"):
                         assert isinstance(v, ast.Constant) and v.value == 0
-    # API_ID_MOVE is only ever compared against, never published.
     for call in calls:
         assert "API_ID_MOVE" not in ast.get_source_segment(text, call)
+    # The only subscription is motion_tx: nothing listens on a request topic.
+    subs = [n for n in ast.walk(tree)
+            if isinstance(n, ast.Call) and getattr(n.func, "attr", "") == "create_subscription"]
+    assert len(subs) == 1
+    assert ast.get_source_segment(text, subs[0].args[1]) == "motion_tx.MOTION_TX_TOPIC"
 
 
 def test_watchdog_command_line_cannot_match_the_bridge():
@@ -203,6 +228,85 @@ def test_watchdog_command_line_cannot_match_the_bridge():
         assert "hardware_bridge_node" not in cmdline
 
 
+# ── The bridge side: motion_tx around real transmits (fake transport) ────
+
+
+class _Pub:
+    def __init__(self, topic, log):
+        self.topic, self.log = topic, log
+
+    def get_subscription_count(self):
+        return 1
+
+    def publish(self, msg):
+        if self.topic == motion_tx.MOTION_TX_TOPIC:
+            self.log.append(("tx", json.loads(msg.data)))
+        else:
+            self.log.append(("req", msg.header.identity.api_id, msg.parameter))
+
+
+def _fake_node(log, tx_raises=False):
+    from types import SimpleNamespace
+
+    def create_publisher(_type, topic, _qos):
+        pub = _Pub(topic, log)
+        if tx_raises and topic == motion_tx.MOTION_TX_TOPIC:
+            pub.publish = lambda msg: (_ for _ in ()).throw(RuntimeError("tx down"))
+        return pub
+
+    return SimpleNamespace(
+        create_publisher=create_publisher,
+        create_subscription=lambda *a, **k: None,
+        get_logger=lambda: SimpleNamespace(warn=lambda *a, **k: None, info=lambda *a, **k: None),
+    )
+
+
+def test_bridge_emits_move_before_and_stop_after_the_transmit():
+    pytest.importorskip("unitree_api.msg")
+    from go2_hardware_bridge.unitree_sport import UnitreeSportBridge
+
+    log = []
+    b = UnitreeSportBridge(_fake_node(log), require_subscriber=False, discovery_timeout_sec=0.0)
+    b.send_velocity(0.2, 0.0, 0.0)
+    b.send_velocity(0.0, 0.0, 0.0)  # zero Move: not signalled
+    b.send_zero()
+    b.emergency_stop()
+    assert [e[1] if e[0] == "tx" else e[1] for e in log] == [
+        {"kind": "move", "transport": "sport", "seq": 1}, 1008, 1008,
+        1003, {"kind": "stop", "transport": "sport", "seq": 2},
+        1003, {"kind": "stop", "transport": "sport", "seq": 3},
+    ]
+    assert [e[0] for e in log] == ["tx", "req", "req", "req", "tx", "req", "tx"]
+
+
+def test_bridge_tx_failure_never_reaches_the_control_loop():
+    pytest.importorskip("unitree_api.msg")
+    from go2_hardware_bridge.unitree_sport import UnitreeSportBridge
+
+    log = []
+    b = UnitreeSportBridge(_fake_node(log, tx_raises=True), require_subscriber=False,
+                           discovery_timeout_sec=0.0)
+    assert b.send_velocity(0.2, 0.0, 0.0) is True
+    assert b.send_zero() is True
+    assert [e[1] for e in log] == [1008, 1003]
+
+
+def test_avoid_bridge_signals_avoid_move_and_stop():
+    pytest.importorskip("unitree_api.msg")
+    from go2_hardware_bridge.unitree_avoid import TRANSPORT_AVOID, UnitreeAvoidBridge
+
+    log = []
+    b = UnitreeAvoidBridge(_fake_node(log), require_subscriber=False, discovery_timeout_sec=0.0)
+    b._transport = TRANSPORT_AVOID
+    b.send_velocity(0.2, 0.0, 0.0)
+    b.send_zero()
+    tx = [e[1] for e in log if e[0] == "tx"]
+    assert [(t["kind"], t["transport"]) for t in tx] == [
+        ("move", "avoid"), ("stop", "avoid"), ("stop", "sport")]
+    # order: move tx, Move, zero Move, its stop tx, StopMove, its stop tx
+    assert [e[0] for e in log] == ["tx", "req", "req", "tx", "req", "tx"]
+
+
 # ── A real node on a private DDS domain ──────────────────────────────────
 
 
@@ -213,7 +317,7 @@ def _spin_until(ex, pred, timeout):
     return pred()
 
 
-def test_real_node_publishes_stopmoves_after_move_traffic_stops(monkeypatch):
+def test_real_node_fires_after_motion_tx_goes_quiet_despite_foreign_moves(monkeypatch):
     rclpy = pytest.importorskip("rclpy")
     pytest.importorskip("unitree_api.msg")
     from rclpy.context import Context
@@ -238,32 +342,48 @@ def test_real_node_publishes_stopmoves_after_move_traffic_stops(monkeypatch):
 
     def on_req(msg):
         if msg.header.identity.api_id == STOP:
-            stops.append(time.monotonic())
+            stops.append((time.monotonic(), msg.header.identity.id))
 
     try:
-        probe.create_subscription(Request, "/api/sport/request", on_req, 10)
+        probe.create_subscription(Request, "/api/sport/request", on_req, 500)
         probe.create_subscription(String, "/go2/stop_watchdog/status",
                                   lambda m: status.append(json.loads(m.data)), 10)
-        pub = probe.create_publisher(Request, "/api/sport/request", 10)
+        sport = probe.create_publisher(Request, "/api/sport/request", 10)
+        tx = probe.create_publisher(String, motion_tx.MOTION_TX_TOPIC, 10)
         assert _spin_until(ex, lambda: status, 20.0), "watchdog never published status"
         assert status[-1]["armed"] is False and status[-1]["fires"] == 0
-        assert _spin_until(ex, lambda: pub.get_subscription_count() >= 2, 10.0)
+        assert _spin_until(ex, lambda: tx.get_subscription_count() >= 1, 10.0)
         time.sleep(0.3)
 
-        msg = Request()
-        msg.header.identity.api_id = MOVE
-        msg.parameter = json.dumps({"x": 0.2, "y": 0.0, "z": 0.0})
         t0 = time.monotonic()
-        pub.publish(msg)
+        tx.publish(String(data=motion_tx.encode("move", "sport", 1)))
         timeout_s = 0.25
-        _spin_until(ex, lambda: False, timeout_s + 1.0)
 
-        rel = [t - t0 for t in stops]
+        # Foreign producers keep publishing Moves (zero and non-zero) on the raw
+        # topic after the "bridge" went quiet. They must not postpone the fire.
+        def foreign():
+            for params in ('{"x":0,"y":0,"z":0}', '{"x":0.3,"y":0,"z":0}'):
+                m = Request()
+                m.header.identity.api_id = MOVE
+                m.parameter = params
+                sport.publish(m)
+
+        end, next_foreign = t0 + timeout_s + 1.0, 0.0
+        while time.monotonic() < end:
+            if time.monotonic() >= next_foreign:
+                foreign()
+                next_foreign = time.monotonic() + 0.03
+            ex.spin_once(timeout_sec=0.002)
+
+        rel = [t - t0 for t, _ in stops]
         window = [r for r in rel if timeout_s <= r <= timeout_s + 0.15]
-        assert len(window) >= 3, f"stop arrival times after the Move: {rel}"
+        assert len(window) >= 3, f"stop arrival times after the Move: {rel} status={status[-3:]}"
         assert all(r >= timeout_s for r in rel), f"early StopMove: {rel}"
         assert len(rel) == 3, f"expected exactly one burst of 3, got {rel}"
+        ids = [i for _, i in stops]
+        assert all(i & WATCHDOG_ID_TAG for i in ids)
         assert status[-1]["fires"] == 1 and status[-1]["armed"] is False
+        assert status[-1]["last_fire_ids"] == ids and status[-1]["last_tx_seq"] == 1
     finally:
         ex.shutdown()
         probe.destroy_node()

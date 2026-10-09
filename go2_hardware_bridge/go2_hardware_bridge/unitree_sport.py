@@ -24,8 +24,12 @@ an explicit StopMove is the better-evidenced stop.
 Nothing inside a killed process can send that StopMove: this adapter's own
 ``tick()`` hold check and the bridge's watchdog both die with the process.
 Bridge-death protection is therefore the separate ``sport_stop_watchdog``
-process (``stop_watchdog.py``), which watches the Move traffic on the request
-topic and publishes StopMove when it goes quiet. It is NOT covered there:
+process (``stop_watchdog.py``). This adapter tells it what it transmits on
+``/go2/hardware_bridge/motion_tx`` (``motion_tx.py``: a "move" before each
+non-zero Move, a "stop" after each StopMove), and it publishes StopMove when
+that signal goes quiet while armed. It deliberately does not watch the raw
+request topics, where other producers' Moves would keep it quiet. It is NOT
+covered there:
 loss of host power or of the network between the host and the robot, because a
 watchdog on the same host or link dies or goes deaf with it. Those cases rely
 on whatever the vendor controller does, which is undocumented.
@@ -55,12 +59,14 @@ Reasons:
 """
 from __future__ import annotations
 
+import itertools
 import json
 import sys
 import threading
 import time
 from typing import Any, Optional
 
+from go2_hardware_bridge import motion_tx
 from go2_hardware_bridge.interface import (
     BridgeHealth,
     BridgeState,
@@ -134,12 +140,18 @@ class UnitreeSportBridge(HardwareBridgeInterface):
                 "onboard computer, or run with hardware_adapter:=dry_run."
             ) from exc
 
+        from std_msgs.msg import String  # noqa: PLC0415
+
         self._Request = Request
         self._node = node
         self._lock = threading.Lock()
         self._health = BridgeHealth(state=BridgeState.UNINITIALIZED, connected=False)
         self._pub = node.create_publisher(Request, topic, qos_depth)
         self._topic = topic
+        # Bridge-to-watchdog signal (motion_tx.py). Created here, not lazily.
+        self._String = String
+        self._tx_pub = node.create_publisher(String, motion_tx.MOTION_TX_TOPIC, 10)
+        self._tx_counter = itertools.count(1)
         self._command_hold = float(command_hold_sec)
         self._require_subscriber = bool(require_subscriber)
         self._discovery_timeout = max(0.0, float(discovery_timeout_sec))
@@ -280,6 +292,15 @@ class UnitreeSportBridge(HardwareBridgeInterface):
 
     # ── Internals ─────────────────────────────────────────────────────
 
+    def _emit_tx(self, kind: str, transport: str) -> None:
+        """Tell sport_stop_watchdog what was transmitted. Must never raise into a stop path."""
+        try:
+            self._tx_pub.publish(
+                self._String(data=motion_tx.encode(kind, transport, next(self._tx_counter)))
+            )
+        except Exception:  # noqa: BLE001
+            pass
+
     def _publish(self, api_id: int, params: Optional[dict]) -> bool:
         if api_id == API_ID_DAMP:
             # Refused by construction: Damp is never transmitted.
@@ -310,6 +331,9 @@ class UnitreeSportBridge(HardwareBridgeInterface):
 
         self._request_seq = (getattr(self, "_request_seq", 0) + 1) % (2**63)
         msg = build_request(self._Request, api_id, params, self._request_seq)
+        is_move = api_id == API_ID_MOVE and motion_tx.velocity_is_nonzero(params)
+        if is_move:
+            self._emit_tx(motion_tx.KIND_MOVE, motion_tx.TRANSPORT_SPORT)  # before the Move
         try:
             self._pub.publish(msg)
         except Exception as exc:  # noqa: BLE001
@@ -320,6 +344,8 @@ class UnitreeSportBridge(HardwareBridgeInterface):
                 self._health.state = BridgeState.FAULT
                 self._health.detail = f"publish failed: {exc}"
             return False
+        if api_id == API_ID_STOP_MOVE:
+            self._emit_tx(motion_tx.KIND_STOP, motion_tx.TRANSPORT_SPORT)  # after the stop
         with self._lock:
             self._health.transmit_attempts += 1
             self._health.last_transmit_ok = True

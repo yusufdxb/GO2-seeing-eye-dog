@@ -10,28 +10,44 @@ decelerated by itself in 0.45 s and then settled about 4 cm backward at +1.1 to
 +1.7 s, while an explicit StopMove 0.016 s after the last Move (2026-10-01) gave
 a clean stop by +0.35 s. This process sends that StopMove.
 
+What it listens to
+------------------
+Only ``/go2/hardware_bridge/motion_tx`` (``motion_tx.py``), which the hardware
+adapters publish: a "move" before every non-zero Move they transmit and a "stop"
+after every stop they transmit. It does NOT subscribe to ``/api/sport/request``
+or the obstacles_avoid request topic. Other producers (the GO2 remote stick
+republish, another bridge) publish Moves there and could keep a raw-topic
+watchdog quiet after the protected bridge died; rclpy Humble callbacks cannot
+tell publishers apart. Its own StopMove loopback is likewise never seen.
+
 Behaviour
 ---------
-It only listens to the request topics and, when Move traffic that was non-zero
-goes quiet, publishes a short burst of stop requests. It is a separate process
-(its own executable, not composed into the bridge), so killing the bridge does
-not kill it.
-
-* ARM: a Sport Move (api 1008) with any of x, y, z non-zero (> 1e-6).
-* REFRESH: any Sport Move, zero or not, updates the last-seen time.
-* DISARM: a Sport StopMove (api 1003 on the Sport topic).
-* FIRE: armed and no Move for more than ``timeout_s``. Emits ``repeat_n``
+* ARM and REFRESH: a "move" message. ``transport=avoid`` marks the episode as
+  involving the obstacles_avoid service.
+* DISARM: a "stop" message.
+* FIRE: armed and no "move" for more than ``timeout_s``. Emits ``repeat_n``
   rounds, ``repeat_dt_s`` apart, then disarms. It re-arms only on the next
-  non-zero Move.
-* Each round is Sport StopMove. If a non-zero Move on the obstacles_avoid
-  service armed the episode, each round is first preceded by that service's
-  zero Move (api 1003 on /api/obstacles_avoid/request, where 1003 means Move,
-  not StopMove), published exactly as ``UnitreeAvoidBridge._avoid_zero`` does.
+  "move". Zero-velocity Moves are not signalled, so they neither arm nor refresh.
+* Each round is Sport StopMove. If an avoid Move armed the episode, each round
+  is first preceded by the avoid service's zero Move (api 1003 on
+  /api/obstacles_avoid/request, where 1003 means Move, not StopMove), published
+  exactly as ``UnitreeAvoidBridge._avoid_zero`` does.
+* Repeats belong to the episode that fired. A new "move" while repeats are
+  pending cancels them: a fresh accepted Move means the bridge is alive.
 * It never publishes a non-zero velocity and never publishes anything except
   those two requests. Nothing else is in its vocabulary.
+* Its StopMove requests carry identity ids from its own space: bit 62 set
+  (``WATCHDOG_ID_TAG``) on top of the same time-derived form ``build_request``
+  uses, strictly increasing. Bridge ids are below 2**62, so a recorded request
+  with ``id & WATCHDOG_ID_TAG`` came from this process. The ids of the last
+  fire's StopMoves are in the status as ``last_fire_ids``.
 
-An unparseable Move parameter is treated as non-zero: arming is the safe
-direction.
+Status JSON on ``/go2/stop_watchdog/status`` (2 Hz and right after each fire)::
+
+    {"armed": bool, "fires": int, "last_fire_t": float|null, "timeout_s": float,
+     "last_fire_ids": [int, ...], "armed_since": float|null, "last_tx_seq": int|null}
+
+Times are the watchdog's steady clock in seconds.
 
 Not covered
 -----------
@@ -41,8 +57,11 @@ Not covered
   Sport StopMove halts a velocity commanded through that service, is
   HW-UNVERIFIED (see ``obstacles_avoid.py``). The avoid zero Move is sent
   because the bridge itself sends it first on every avoid-mode stop.
-* A Move published on a different topic or by a producer this process cannot
-  see (it only sees what DDS delivers to it).
+* A bridge that keeps running but whose motion_tx stops (it then looks dead and
+  is stopped, which is the safe direction), and any producer that moves the
+  robot without going through the protected bridge.
+* A reliable subscription cannot observe a best-effort publisher; motion_tx is
+  reliable on both ends.
 
 ``StopWatchdogLogic`` is pure (no ROS imports) and is fed a monotonic time, so
 it is unit-testable without a graph.
@@ -50,15 +69,15 @@ it is unit-testable without a graph.
 from __future__ import annotations
 
 import json
-import math
+import time
 from dataclasses import dataclass
 from typing import Any, List, Optional
 
+from go2_hardware_bridge import motion_tx
 from go2_hardware_bridge import obstacles_avoid as oa
 from go2_hardware_bridge.unitree_sport import (
-    API_ID_MOVE,
     API_ID_STOP_MOVE,
-    SPORT_REQUEST_TOPIC,
+    SPORT_REQUEST_TOPIC,  # published to only; never subscribed
     build_request,
 )
 
@@ -79,40 +98,27 @@ DEFAULT_TIMEOUT_S = 0.25
 DEFAULT_REPEAT_N = 3
 DEFAULT_REPEAT_DT_S = 0.02
 
-#: A velocity component at or below this magnitude counts as zero.
-NONZERO_EPS = 1e-6
-
 ACTION_SPORT_STOP = "sport_stop"
 ACTION_AVOID_ZERO = "avoid_zero"
+
+#: Bit 62 of request identity.id marks a request published by this process.
+WATCHDOG_ID_TAG = 1 << 62
 
 #: The only parameters this module ever publishes on the avoid Move call.
 AVOID_ZERO_PARAMS = {"x": 0.0, "y": 0.0, "yaw": 0.0, "mode": oa.MOVE_MODE_VELOCITY}
 
-_VELOCITY_KEYS = ("x", "y", "z", "yaw")
+
+def default_id_base() -> int:
+    """First watchdog request id: tag bit plus the form build_request uses (us * 1000)."""
+    return WATCHDOG_ID_TAG | (int(time.time_ns() // 1000) * 1000)
 
 
 @dataclass(frozen=True)
 class Action:
-    """One request to publish ``delay_s`` after the tick that returned it."""
+    """One request to publish now, with the identity id it must carry."""
 
     kind: str
-    delay_s: float = 0.0
-
-
-def parameter_is_nonzero(parameter: Any) -> bool:
-    """True if a Move request's JSON parameter commands any velocity (or is unreadable)."""
-    try:
-        obj = json.loads(parameter) if isinstance(parameter, (str, bytes)) else parameter
-        if not isinstance(obj, dict):
-            return True
-        for key in _VELOCITY_KEYS:
-            if key in obj:
-                value = float(obj[key])
-                if not math.isfinite(value) or abs(value) > NONZERO_EPS:
-                    return True
-        return False
-    except Exception:  # noqa: BLE001, unreadable means "assume moving"
-        return True
+    request_id: int
 
 
 class StopWatchdogLogic:
@@ -123,6 +129,7 @@ class StopWatchdogLogic:
         timeout_s: float = DEFAULT_TIMEOUT_S,
         repeat_n: int = DEFAULT_REPEAT_N,
         repeat_dt_s: float = DEFAULT_REPEAT_DT_S,
+        id_base: Optional[int] = None,
     ) -> None:
         if not timeout_s > 0.0:
             raise ValueError("timeout_s must be > 0")
@@ -134,49 +141,63 @@ class StopWatchdogLogic:
         self.repeat_n = int(repeat_n)
         self.repeat_dt_s = float(repeat_dt_s)
         self.armed = False
+        self.armed_since: Optional[float] = None
         self.fires = 0
         self.last_fire_t: Optional[float] = None
+        self.last_fire_ids: List[int] = []
+        self.last_tx_seq: Optional[int] = None
         self._last_move_t: Optional[float] = None
         self._avoid_involved = False
+        self._next_id = default_id_base() if id_base is None else int(id_base)
+        #: (due_t, Action) of the episode that fired; cleared by the next "move".
+        self._pending: List[tuple] = []
 
-    def on_sport_request(self, api_id: int, nonzero: bool, t: float) -> None:
-        if api_id == API_ID_MOVE:
-            self._on_move(nonzero, t)
-        elif api_id == API_ID_STOP_MOVE:
-            self._disarm()
-
-    def on_avoid_request(self, api_id: int, nonzero: bool, t: float) -> None:
-        # On this service only api 1003 (Move) matters; the switch calls
-        # (SwitchSet, SwitchGet, UseRemoteCommandFromApi) are not motion.
-        if api_id == oa.API_MOVE:
-            self._on_move(nonzero, t, via_avoid=True)
-
-    def _on_move(self, nonzero: bool, t: float, via_avoid: bool = False) -> None:
-        self._last_move_t = t
-        if nonzero:
-            self.armed = True
-            if via_avoid:
+    def on_motion_tx(self, kind: str, transport: str, seq: int, t: float) -> None:
+        """Feed one decoded motion_tx message received at monotonic time ``t``."""
+        self.last_tx_seq = seq
+        if kind == motion_tx.KIND_MOVE:
+            self._last_move_t = t
+            if not self.armed:
+                self.armed = True
+                self.armed_since = t
+            if transport == motion_tx.TRANSPORT_AVOID:
                 self._avoid_involved = True
+            self._pending.clear()  # a fresh Move: the bridge is alive, repeats are obsolete
+        elif kind == motion_tx.KIND_STOP:
+            self._disarm()
 
     def _disarm(self) -> None:
         self.armed = False
+        self.armed_since = None
         self._avoid_involved = False
 
+    def _new_id(self) -> int:
+        self._next_id += 1
+        return self._next_id
+
     def tick(self, t: float) -> List[Action]:
-        if not self.armed or self._last_move_t is None:
-            return []
-        if (t - self._last_move_t) <= self.timeout_s:
-            return []
-        actions: List[Action] = []
-        for i in range(self.repeat_n):
-            delay = i * self.repeat_dt_s
-            if self._avoid_involved:
-                actions.append(Action(ACTION_AVOID_ZERO, delay))
-            actions.append(Action(ACTION_SPORT_STOP, delay))
-        self.fires += 1
-        self.last_fire_t = t
-        self._disarm()
-        return actions
+        """Actions to publish at ``t``. Fires on silence; later repeats come due on later ticks."""
+        if (
+            self.armed
+            and self._last_move_t is not None
+            and (t - self._last_move_t) > self.timeout_s
+        ):
+            stop_ids: List[int] = []
+            for i in range(self.repeat_n):
+                due = t + i * self.repeat_dt_s
+                if self._avoid_involved:
+                    self._pending.append((due, Action(ACTION_AVOID_ZERO, self._new_id())))
+                stop = Action(ACTION_SPORT_STOP, self._new_id())
+                stop_ids.append(stop.request_id)
+                self._pending.append((due, stop))
+            self.fires += 1
+            self.last_fire_t = t
+            self.last_fire_ids = stop_ids
+            self._disarm()
+        due_now = [a for d, a in self._pending if d <= t]
+        if due_now:
+            self._pending = [(d, a) for d, a in self._pending if d > t]
+        return due_now
 
     def status(self) -> dict:
         return {
@@ -184,6 +205,9 @@ class StopWatchdogLogic:
             "fires": self.fires,
             "last_fire_t": self.last_fire_t,
             "timeout_s": self.timeout_s,
+            "last_fire_ids": list(self.last_fire_ids),
+            "armed_since": self.armed_since,
+            "last_tx_seq": self.last_tx_seq,
         }
 
 
@@ -213,8 +237,6 @@ class SportStopWatchdogNode(Node):
         # Steady clock: a stalled or jumping /clock or wall-clock step must not
         # freeze or misfire the one process whose job is to stop the robot.
         self._clock = Clock(clock_type=ClockType.STEADY_TIME)
-        self._pending: List[tuple] = []  # (due_t, kind)
-        self._seq = 0
 
         # Publishers first (not lazily): the stop path must exist from startup.
         # Same QoS as the bridge's publishers (default reliable, volatile).
@@ -222,8 +244,8 @@ class SportStopWatchdogNode(Node):
         self._avoid_pub = self.create_publisher(Request, oa.REQUEST_TOPIC, 10)
         self._status_pub = self.create_publisher(String, STATUS_TOPIC, 10)
 
-        self.create_subscription(Request, SPORT_REQUEST_TOPIC, self._on_sport, 10)
-        self.create_subscription(Request, oa.REQUEST_TOPIC, self._on_avoid, 10)
+        # The ONLY input. Not the raw request topics (see module docstring).
+        self.create_subscription(String, motion_tx.MOTION_TX_TOPIC, self._on_motion_tx, 10)
 
         self.create_timer(0.02, self._on_timer, clock=self._clock)
         self.create_timer(0.5, self._publish_status, clock=self._clock)
@@ -235,42 +257,34 @@ class SportStopWatchdogNode(Node):
     def _now(self) -> float:
         return self._clock.now().nanoseconds / 1e9
 
-    def _on_sport(self, msg: Any) -> None:
-        api_id = int(msg.header.identity.api_id)
-        nonzero = api_id == API_ID_MOVE and parameter_is_nonzero(msg.parameter)
-        self._logic.on_sport_request(api_id, nonzero, self._now())
-
-    def _on_avoid(self, msg: Any) -> None:
-        api_id = int(msg.header.identity.api_id)
-        nonzero = api_id == oa.API_MOVE and parameter_is_nonzero(msg.parameter)
-        self._logic.on_avoid_request(api_id, nonzero, self._now())
+    def _on_motion_tx(self, msg: Any) -> None:
+        decoded = motion_tx.decode(msg.data)
+        if decoded is None:
+            self.get_logger().warn("ignoring malformed motion_tx message")
+            return
+        kind, transport, seq = decoded
+        self._logic.on_motion_tx(kind, transport, seq, self._now())
 
     def _on_timer(self) -> None:
-        now = self._now()
-        actions = self._logic.tick(now)
-        if actions:
+        fires_before = self._logic.fires
+        for action in self._logic.tick(self._now()):
+            self._publish_action(action)
+        if self._logic.fires != fires_before:
             self.get_logger().warn(
-                f"no Move for >{self._logic.timeout_s:.2f}s while armed: "
+                f"no bridge Move for >{self._logic.timeout_s:.2f}s while armed: "
                 f"publishing StopMove x{self._logic.repeat_n} "
                 f"(fire #{self._logic.fires})"
             )
-            self._pending.extend((now + a.delay_s, a.kind) for a in actions)
-        due = [p for p in self._pending if p[0] <= now]
-        if due:
-            self._pending = [p for p in self._pending if p[0] > now]
-            for _, kind in due:
-                self._publish_action(kind)
-        if actions:
             self._publish_status()
 
-    def _publish_action(self, kind: str) -> None:
-        self._seq += 1
-        if kind == ACTION_SPORT_STOP:
-            self._sport_pub.publish(
-                build_request(self._Request, API_ID_STOP_MOVE, None, self._seq)
-            )
-        elif kind == ACTION_AVOID_ZERO:
-            msg = build_request(self._Request, oa.API_MOVE, AVOID_ZERO_PARAMS, self._seq)
+    def _publish_action(self, action: Action) -> None:
+        if action.kind == ACTION_SPORT_STOP:
+            msg = build_request(self._Request, API_ID_STOP_MOVE, None)
+            msg.header.identity.id = action.request_id
+            self._sport_pub.publish(msg)
+        elif action.kind == ACTION_AVOID_ZERO:
+            msg = build_request(self._Request, oa.API_MOVE, AVOID_ZERO_PARAMS)
+            msg.header.identity.id = action.request_id
             msg.header.policy.noreply = True  # as UnitreeAvoidBridge._avoid_zero
             self._avoid_pub.publish(msg)
 

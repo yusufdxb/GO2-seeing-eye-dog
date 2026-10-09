@@ -212,8 +212,8 @@ def generate_launch_description() -> LaunchDescription:
                 default_value="auto",
                 description=(
                     "auto | true | false. Starts the separate sport_stop_watchdog "
-                    "process, which publishes StopMove if Move traffic goes quiet "
-                    "(e.g. the bridge was killed). auto = on for unitree_sport and "
+                    "process, which publishes StopMove if the bridge's motion_tx "
+                    "signal goes quiet while armed (e.g. the bridge was killed). auto = on for unitree_sport and "
                     "unitree_avoid, never for dry_run."
                 ),
             ),

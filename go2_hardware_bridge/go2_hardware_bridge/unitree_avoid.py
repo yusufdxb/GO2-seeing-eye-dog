@@ -34,6 +34,7 @@ import json
 import time
 from typing import Any, Dict, Optional, Tuple
 
+from go2_hardware_bridge import motion_tx
 from go2_hardware_bridge import obstacles_avoid as oa
 from go2_hardware_bridge.interface import BridgeState
 from go2_hardware_bridge.obstacles_avoid import ApiCall, AvoidSwitchError
@@ -316,10 +317,16 @@ class UnitreeAvoidBridge(UnitreeSportBridge):
         msg.header.policy.noreply = bool(noreply)
         msg.parameter = json.dumps(params) if params is not None else ""
         msg.binary = []
+        is_move = call == oa.MOVE
+        nonzero = is_move and motion_tx.velocity_is_nonzero(params)
+        if nonzero:
+            self._emit_tx(motion_tx.KIND_MOVE, motion_tx.TRANSPORT_AVOID)  # before the Move
         try:
             self._avoid_pub.publish(msg)
         except Exception as exc:  # noqa: BLE001
             self._account(False, f"publish failed: {exc}")
             return None
+        if is_move and not nonzero:
+            self._emit_tx(motion_tx.KIND_STOP, motion_tx.TRANSPORT_AVOID)  # after the zero Move
         self._account(True)
         return rid
