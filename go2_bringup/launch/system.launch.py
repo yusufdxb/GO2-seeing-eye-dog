@@ -46,9 +46,15 @@ Arguments
     of spinning or backing up (go2_navigation/behavior_trees/
     navigate_to_pose_no_recovery.xml).
 
-``hardware_adapter`` dry_run | unitree_sport   (default: dry_run)
+``hardware_adapter`` dry_run | unitree_sport | unitree_avoid   (default: dry_run)
     The default is dry_run. Selecting a physical adapter is an explicit,
     deliberate act.
+
+``stop_watchdog``   auto | true | false   (default: auto)
+    Starts ``sport_stop_watchdog`` as its own process next to the bridge. It
+    publishes Sport StopMove if non-zero Move traffic goes quiet, which covers
+    the bridge being killed (it does not cover host power or network loss).
+    auto = on for unitree_sport and unitree_avoid, never for dry_run.
 
 The motion path is defined in exactly one place, ``motion_authority.launch.py``,
 which every variant of this file includes unchanged.
@@ -327,6 +333,9 @@ def generate_launch_description() -> LaunchDescription:
         DeclareLaunchArgument("motion_authority_topic", default_value=""),
         DeclareLaunchArgument("motion_authority_name", default_value="nav2"),
         DeclareLaunchArgument("grant_timeout_s", default_value="0.3"),
+        # auto | true | false: separate sport_stop_watchdog process (auto = on for
+        # unitree_sport / unitree_avoid, never dry_run). See motion_authority.launch.py.
+        DeclareLaunchArgument("stop_watchdog", default_value="auto"),
     ]
 
     motion_authority = IncludeLaunchDescription(
@@ -338,6 +347,7 @@ def generate_launch_description() -> LaunchDescription:
             "motion_authority_topic": LaunchConfiguration("motion_authority_topic"),
             "motion_authority_name": LaunchConfiguration("motion_authority_name"),
             "grant_timeout_s": LaunchConfiguration("grant_timeout_s"),
+            "stop_watchdog": LaunchConfiguration("stop_watchdog"),
             "require_localization": PythonExpression(
                 ["'false' if '", LaunchConfiguration("localization"), "' == 'none' else 'true'"]
             ),

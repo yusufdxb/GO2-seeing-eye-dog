@@ -1,37 +1,41 @@
 """
 UnitreeSportBridge, velocity transport to a physical GO2 via the Sport API.
 
-STATUS: IMPLEMENTED, NEVER EXECUTED AGAINST HARDWARE BY THIS REPOSITORY.
+STATUS: IMPLEMENTED. Executed against hardware once by this repository, on
+2026-10-09 (the N0 gate: the bridge process was SIGKILLed while Nav2 drove the
+robot). That one run is the only hardware evidence; it is n=1 and it exercised
+the process-death path, not the rest of the contract.
+``docs/research_system_claims.md`` lists this adapter under "implemented but not
+physically validated" and it stays there until a logged hardware session
+covering the rest of the contract says otherwise.
 
-Everything in this file is written from the Unitree ROS 2 SDK message
-definitions and the documented Sport API request format.  No line of it has
-been run against a GO2.  It is provided so the adapter contract is real
-rather than hypothetical, and so the eventual hardware bring-up is a
-bring-up, not a rewrite.  ``docs/research_system_claims.md`` lists this under
-"implemented but not physically validated" and it must stay there until a
-logged hardware session says otherwise.
+What is known about bridge death (measured, n=1)
+------------------------------------------------
+Nobody has documented how the vendor sport service treats a Move that is no
+longer being refreshed: the timeout behaviour is undocumented, and this file
+makes no claim about it. What was measured on 2026-10-09: the last Move was
+{"x": 0.213, "y": 0, "z": -0.011}, then silence (bridge SIGKILLed). The robot
+decelerated below 0.05 m/s in 0.45 s by itself, and then showed an unexplained
+backward settle of about 4 cm at +1.1 to +1.7 s. On 2026-10-01 an explicit
+StopMove (api 1003) sent 0.016 s after the last Move gave a clean stop by
++0.35 s with no late settle. So silence is survivable in the one case seen, but
+an explicit StopMove is the better-evidenced stop.
 
-The command-starvation property
--------------------------------
-The Sport API's ``Move`` is a LATCHING command: the onboard controller keeps
-executing the last velocity it was given until it receives another one or a
-``StopMove``. That makes the obvious implementation dangerous. If this bridge
-is SIGKILLed, or its host loses power, or the process is OOM-killed, no
-shutdown handler runs, and the last thing the robot heard was
-``Move(0.4, 0, 0)``. It walks away.
+Nothing inside a killed process can send that StopMove: this adapter's own
+``tick()`` hold check and the bridge's watchdog both die with the process.
+Bridge-death protection is therefore the separate ``sport_stop_watchdog``
+process (``stop_watchdog.py``), which watches the Move traffic on the request
+topic and publishes StopMove when it goes quiet. It is NOT covered there:
+loss of host power or of the network between the host and the robot, because a
+watchdog on the same host or link dies or goes deaf with it. Those cases rely
+on whatever the vendor controller does, which is undocumented.
 
-So this adapter does **not** treat ``send_velocity`` as "transmit when the
-value changes". Every call transmits, the bridge calls it on every control
-tick, and the adapter additionally refuses to keep asserting a velocity it has
-not been re-given within ``command_hold_sec``. Bridge death therefore becomes
-command starvation at the robot, which is a condition the robot can act on,
-rather than a silent handover of control to the last message that happened to
-arrive.
+This adapter still transmits on every call (nothing is deduplicated) and
+``tick()`` still issues StopMove when a non-zero velocity is not renewed within
+``command_hold_sec``; those cover a stalled control loop inside a live process.
 
-This is the one place where the dry-run adapter and the physical adapter differ
-in kind rather than in destination: ``DryRunGo2Bridge`` is a pure recorder with
-no latching semantics, so **no dry-run test can detect this class of bug**.
-That asymmetry is why it is written down here.
+``DryRunGo2Bridge`` is a pure recorder with no controller behind it, so no
+dry-run test can detect this class of bug.
 
 Interface choice
 ----------------
@@ -75,6 +79,28 @@ API_ID_STAND_UP = 1010
 
 #: Topic the GO2 sport service listens on.
 SPORT_REQUEST_TOPIC = "/api/sport/request"
+
+
+def build_request(request_cls: Any, api_id: int, params: Optional[dict], seq: int = 0):
+    """
+    Build one ``unitree_api/msg/Request`` exactly as the sport service expects it.
+
+    Shared by the bridge and the stop watchdog so the wire format lives in one
+    place. Field notes (docs/go2_field_notes.md s4): the request format verified
+    on the robot uses a unique identity.id per request and noreply=false, under
+    which the sport service answers on /api/sport/response with the matching id.
+    id=0 on every request made replies unmatchable, and noreply=true was never
+    exercised on hardware.
+    """
+    msg = request_cls()
+    msg.header.identity.api_id = api_id
+    msg.header.identity.id = int(time.time_ns() // 1000) * 1000 + seq % 1000
+    msg.header.lease.id = 0
+    msg.header.policy.priority = 0
+    msg.header.policy.noreply = False
+    msg.parameter = json.dumps(params) if params is not None else ""
+    msg.binary = []
+    return msg
 
 
 class UnitreeSportBridge(HardwareBridgeInterface):
@@ -160,9 +186,9 @@ class UnitreeSportBridge(HardwareBridgeInterface):
         """
         Transmit a Move request. Every call transmits; nothing is deduplicated.
 
-        Re-sending an unchanged velocity is deliberate. See the module
-        docstring: Move latches on the robot, so a bridge that only publishes
-        on change hands control to its last message if it dies.
+        Re-sending an unchanged velocity is deliberate: the receiver always sees
+        a fresh Move, and the sport_stop_watchdog process tells "still driving"
+        from "bridge gone" by the arrival of these messages.
         """
         ok = self._publish(API_ID_MOVE, {"x": float(vx), "y": float(vy), "z": float(wz)})
         with self._lock:
@@ -282,20 +308,8 @@ class UnitreeSportBridge(HardwareBridgeInterface):
         except Exception:  # noqa: BLE001, fall through to the publish attempt
             pass
 
-        msg = self._Request()
-        msg.header.identity.api_id = api_id
-        # Field notes (docs/go2_field_notes.md s4): the request format verified
-        # on the robot uses a unique identity.id per request and noreply=false,
-        # under which the sport service answers on /api/sport/response with the
-        # matching id. id=0 on every request made replies unmatchable, and
-        # noreply=true was never exercised on hardware.
         self._request_seq = (getattr(self, "_request_seq", 0) + 1) % (2**63)
-        msg.header.identity.id = int(time.time_ns() // 1000) * 1000 + self._request_seq % 1000
-        msg.header.lease.id = 0
-        msg.header.policy.priority = 0
-        msg.header.policy.noreply = False
-        msg.parameter = json.dumps(params) if params is not None else ""
-        msg.binary = []
+        msg = build_request(self._Request, api_id, params, self._request_seq)
         try:
             self._pub.publish(msg)
         except Exception as exc:  # noqa: BLE001

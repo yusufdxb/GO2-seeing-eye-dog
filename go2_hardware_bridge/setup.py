@@ -19,6 +19,7 @@ setup(
     entry_points={
         "console_scripts": [
             "hardware_bridge_node = go2_hardware_bridge.hardware_bridge_node:main",
+            "sport_stop_watchdog_node = go2_hardware_bridge.stop_watchdog:main",
         ],
     },
 )

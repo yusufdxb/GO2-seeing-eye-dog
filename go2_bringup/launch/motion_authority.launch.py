@@ -34,7 +34,12 @@ from __future__ import annotations
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.conditions import IfCondition
+from launch.substitutions import (
+    LaunchConfiguration,
+    PathJoinSubstitution,
+    PythonExpression,
+)
 from launch_ros.actions import Node
 from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
@@ -142,8 +147,47 @@ def get_motion_authority_nodes(
     return [arbiter, bridge]
 
 
+#: Adapters that talk to a real GO2 and therefore need the stop watchdog.
+PHYSICAL_ADAPTERS = ("unitree_sport", "unitree_avoid")
+
+
+def get_stop_watchdog_node(
+    hardware_adapter="dry_run", stop_watchdog="auto", log_level="info"
+):
+    """
+    The sport_stop_watchdog Node: its OWN process, never composed into the bridge.
+
+    The bridge's watchdogs die with the bridge. This one must survive it, so it
+    is a separate executable (``sport_stop_watchdog_node``; its command line
+    cannot match the bridge's ``hardware_bridge_node``, which the N0 gate uses
+    to find the bridge it kills).
+
+    Enabled when ``stop_watchdog`` is ``true``, or ``auto`` with a physical
+    adapter. ``false`` disables it. Any other value behaves as ``auto`` so a
+    typo cannot silently switch a safety process off. ``auto`` never starts it
+    for dry_run.
+    """
+    adapters = "(" + ", ".join(repr(a) for a in PHYSICAL_ADAPTERS) + ")"
+    enabled = PythonExpression(
+        [
+            "'", stop_watchdog, "' == 'true' or ('", stop_watchdog,
+            "' != 'false' and '", hardware_adapter, "' in ", adapters, ")",
+        ]
+    )
+    return Node(
+        package="go2_hardware_bridge",
+        executable="sport_stop_watchdog_node",
+        name="sport_stop_watchdog",
+        output="screen",
+        emulate_tty=True,
+        arguments=["--ros-args", "--log-level", log_level],
+        condition=IfCondition(enabled),
+    )
+
+
 def generate_launch_description() -> LaunchDescription:
     hardware_adapter = LaunchConfiguration("hardware_adapter")
+    stop_watchdog = LaunchConfiguration("stop_watchdog")
     dry_run_log_path = LaunchConfiguration("dry_run_log_path")
     log_level = LaunchConfiguration("log_level")
     require_localization = LaunchConfiguration("require_localization")
@@ -161,6 +205,16 @@ def generate_launch_description() -> LaunchDescription:
                     "unitree_sport (publishes Sport API Move requests to a "
                     "physical GO2; NEVER executed against hardware by this "
                     "repository)."
+                ),
+            ),
+            DeclareLaunchArgument(
+                "stop_watchdog",
+                default_value="auto",
+                description=(
+                    "auto | true | false. Starts the separate sport_stop_watchdog "
+                    "process, which publishes StopMove if Move traffic goes quiet "
+                    "(e.g. the bridge was killed). auto = on for unitree_sport and "
+                    "unitree_avoid, never for dry_run."
                 ),
             ),
             DeclareLaunchArgument(
@@ -201,4 +255,5 @@ def generate_launch_description() -> LaunchDescription:
             motion_authority_name,
             grant_timeout_s,
         )
+        + [get_stop_watchdog_node(hardware_adapter, stop_watchdog, log_level)]
     )

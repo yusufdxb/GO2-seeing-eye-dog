@@ -314,7 +314,7 @@ class HardwareBridgeNode(Node):
         )
         self._publish_avoid_state()
 
-        self._timer = self.create_timer(self._period, self._tick)
+        self._timer = self.create_timer(self._period, self._tick, clock=self._steady_clock)
 
         self.get_logger().info(
             f"HardwareBridgeNode active. adapter={self._adapter.name} "
