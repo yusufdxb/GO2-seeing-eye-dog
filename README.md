@@ -1,3 +1,10 @@
+<p align="center">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/readme/hero-dark.webp">
+  <img width="760" src="assets/readme/hero-light.webp" alt="A Unitree GO2 quadruped resolving out of drifting particles.">
+</picture>
+</p>
+
 # GO2 Seeing-Eye Dog
 
 **A ROS 2 stack that lets a blind or low-vision user call a Unitree GO2 quadruped across a room by speaking to it, and have the robot work out who called, where that person is standing, and walk to them.**
