@@ -108,7 +108,8 @@ controller_server:
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
       stateful: true
-      xy_goal_tolerance: 0.25
+      # Short goals must require translation before the goal checker accepts.
+      xy_goal_tolerance: 0.05
       yaw_goal_tolerance: 0.5
 
     FollowPath:
@@ -121,8 +122,10 @@ controller_server:
       rotate_to_heading_angular_vel: 0.5
       transform_tolerance: 0.3
       use_velocity_scaled_lookahead_dist: false
-      min_approach_linear_velocity: 0.08
-      approach_velocity_scaling_dist: 0.8
+      # Slow only near the endpoint. A 0.08 m/s approach did not produce
+      # sustained physical translation on the stock locomotion controller.
+      min_approach_linear_velocity: 0.20
+      approach_velocity_scaling_dist: 0.15
       use_collision_detection: true
       max_allowed_time_to_collision_up_to_carrot: 1.5
       use_regulated_linear_velocity_scaling: true
