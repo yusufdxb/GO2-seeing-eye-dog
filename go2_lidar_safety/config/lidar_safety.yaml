@@ -42,7 +42,7 @@ lidar_hazard_node:
     #   latches for hazard_clear_hold_sec.
     stop_distance_m: 0.35
     # unit: m ahead of the nose | slowdown-class: arbiter scales limits by
-    #   degraded_scale (0.35 -> 0.14 m/s). Not latched.
+    #   degraded_scale (0.5 -> 0.20 m/s). Not latched.
     slowdown_distance_m: 0.90
     # unit: m from any side of the body box | SLOWDOWN only.
     surround_radius_m: 0.15

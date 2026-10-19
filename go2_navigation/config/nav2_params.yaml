@@ -108,8 +108,10 @@ controller_server:
     general_goal_checker:
       plugin: "nav2_controller::SimpleGoalChecker"
       stateful: true
-      # Short goals must require translation before the goal checker accepts.
-      xy_goal_tolerance: 0.05
+      # Short goals must require translation before the goal checker accepts, but a legged
+      # robot cannot land within 0.05 m: 2026-10-19 arr_1 stalled 0.12 m short and aborted
+      # on the progress checker. 0.20 still needs most of any goal >= 0.3 m walked.
+      xy_goal_tolerance: 0.20
       yaw_goal_tolerance: 0.5
 
     FollowPath:

@@ -62,9 +62,12 @@ safety_arbiter_node:
 
     # unit: dimensionless multiplier | meaning: velocity scale applied while
     #       in DEGRADED (a slowdown-class hazard is asserted).
-    # source: chosen so derated top speed (0.14 m/s) is a slow walk.
+    # source: 2026-10-19 (owner-approved): 0.35 (0.14 m/s) is below the GO2's stepping
+    #   threshold, so the robot stood still inside every slowdown zone (arr_1 stalled 0.12 m
+    #   short, progress-checker abort). 0.5 -> 0.20 m/s, the slowest speed it walks at.
+    #   The 0.35 m stop zone is unchanged.
     # safe_default: yes | hardware_validated: false
-    degraded_scale: 0.35
+    degraded_scale: 0.5
 
     # ── Freshness and watchdogs (Invariants B and C) ──────────────────
     # unit: s | meaning: an individual candidate older than this is refused.
