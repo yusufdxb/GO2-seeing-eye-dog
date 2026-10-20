@@ -224,3 +224,21 @@ def test_transform_rotates_and_translates():
 def test_zero_quaternion_is_rejected():
     with pytest.raises(ValueError):
         quaternion_matrix(0.0, 0.0, 0.0, 0.0)
+
+
+def test_deployed_config_stops_only_inside_ten_centimetres():
+    """lidar_safety.yaml as deployed: the robot slows from 0.90 m ahead of the nose and stops
+    only for what is within 0.10 m (owner, 2026-10-20)."""
+    import pathlib
+
+    import yaml
+    cfg = yaml.safe_load((pathlib.Path(__file__).resolve().parents[1] / "config"
+                          / "lidar_safety.yaml").read_text())["lidar_hazard_node"]["ros__parameters"]
+    fields = HazardParams.__dataclass_fields__
+    params = HazardParams(**{k: v for k, v in cfg.items() if k in fields})
+    assert params.stop_distance_m == pytest.approx(0.10)
+    assert evaluate(wall_ahead(0.09), params).decision.startswith("RESTRICT:")
+    assert "F" in evaluate(wall_ahead(0.09), params).decision
+    assert evaluate(wall_ahead(0.12), params).decision == SLOWDOWN
+    assert evaluate(wall_ahead(0.85), params).decision == SLOWDOWN
+    assert evaluate(wall_ahead(1.0), params).decision == CLEAR

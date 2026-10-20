@@ -40,12 +40,17 @@ lidar_hazard_node:
 
     # unit: m ahead of the nose | stop-class: arbiter authorizes zero and
     #   latches for hazard_clear_hold_sec.
-    stop_distance_m: 0.35
+    # source: 2026-10-20 (owner): stop only for what is really too close,
+    #   0.35 -> 0.10. Fits because the 0.90 m slowdown zone holds the robot at
+    #   0.20 m/s: coast after a stop measured 0.03-0.06 m at 0.19-0.41 m/s on
+    #   2026-10-19 (0.10 m once at 0.31 m/s, when the bridge died). Not yet
+    #   hardware-tested at 0.10.
+    stop_distance_m: 0.10
     # unit: m ahead of the nose | slowdown-class: arbiter scales limits by
     #   degraded_scale (0.5 -> 0.20 m/s). Not latched.
     slowdown_distance_m: 0.90
     # unit: m from any side of the body box | SLOWDOWN only.
-    surround_radius_m: 0.15
+    surround_radius_m: 0.10
     # Returns needed at or inside an obstacle's distance for it to count.
     min_obstacle_points: 3
 

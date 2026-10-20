@@ -65,7 +65,8 @@ safety_arbiter_node:
     # source: 2026-10-19 (owner-approved): 0.35 (0.14 m/s) is below the GO2's stepping
     #   threshold, so the robot stood still inside every slowdown zone (arr_1 stalled 0.12 m
     #   short, progress-checker abort). 0.5 -> 0.20 m/s, the slowest speed it walks at.
-    #   The 0.35 m stop zone is unchanged.
+    #   2026-10-20: the stop zone ahead is 0.10 m (lidar_safety.yaml), and holding
+    #   0.20 m/s through the 0.90 m slowdown zone is what lets it stop in time.
     # safe_default: yes | hardware_validated: false
     degraded_scale: 0.5
 
